@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video đã học · ShadowDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef1f4; --panel: #fff; --line: #d9e0e6; --ink: #15202b; --mute: #5d6d7b;
+    --accent: #0f6e6e; --accent-ink: #fff; --ok: #12804a; --okbg: #d7f3e3;
+    --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #182129; --panel: #202c36; --line: #34424e; --ink: #e7eef4; --mute: #a0afbd;
+      --accent: #4fc3bd; --accent-ink: #052321; --ok: #62d394; --okbg: #12301f;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font); }
+  a { color: inherit; }
+  .top { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px max(16px, calc((100% - 1120px) / 2)); border-bottom: 1px solid var(--line); background: var(--panel); }
+  .brand { margin-right: auto; font-size: 18px; font-weight: 700; text-decoration: none; }
+  .brand span { background: #ffe27a; color: #3a2e00; padding: 0 6px; margin-left: 2px; border-radius: 3px; }
+  .button { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .button:hover { border-color: var(--accent); }
+  .button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  main { width: min(1120px, 100%); margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { margin: 0; font-size: clamp(24px, 4vw, 32px); line-height: 1.25; }
+  .intro { margin: 8px 0 20px; color: var(--mute); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  #search { flex: 1 1 260px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; }
+  .stats { color: var(--mute); font-size: 13px; }
+  .notice { margin: 12px 0; padding: 10px 12px; border-radius: 8px; background: #ffe9c7; color: #704300; }
+  .notice[hidden] { display: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+  .card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  .card h2 { margin: 0; font-size: 17px; line-height: 1.4; overflow-wrap: anywhere; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; color: var(--mute); font-size: 12px; }
+  .progress-label { display: flex; justify-content: space-between; gap: 8px; margin-top: 18px; font-size: 13px; }
+  .progress-label span:last-child { color: var(--mute); }
+  .bar { height: 8px; margin-top: 7px; overflow: hidden; border-radius: 8px; background: var(--bg); }
+  .bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+  .score { margin: 8px 0 0; color: var(--mute); font-size: 12px; }
+  .complete { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 12px; background: var(--okbg); color: var(--ok); font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .empty { padding: 32px 18px; border: 1px dashed var(--line); border-radius: 12px; color: var(--mute); text-align: center; }
+  .empty[hidden] { display: none; }
+  @media (max-width: 520px) { .top { padding: 12px 14px; } main { padding-top: 22px; } .toolbar { align-items: stretch; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">Shadow<span>Desk</span></a>
+  <a class="button primary" href="index.html">+ Học video mới</a>
+</header>
+<main>
+  <h1>Video đã học</h1>
+  <p class="intro">Mở lại transcript và tiếp tục shadowing. Tiến độ được lưu riêng trên trình duyệt này.</p>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Tìm theo tên video, mã video hoặc ngôn ngữ…" aria-label="Tìm video đã học">
+    <span class="stats" id="stats"></span>
+  </div>
+  <div class="notice" id="notice" role="status" hidden></div>
+  <section class="grid" id="videos" aria-label="Danh sách video đã học"></section>
+  <div class="empty" id="empty" hidden></div>
+</main>
+<script>
+(() => {
+  const $ = selector => document.querySelector(selector);
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const validId = id => typeof id === 'string' && /^[\w-]{11}$/.test(id);
+  const notice = message => {
+    $('#notice').textContent = message;
+    $('#notice').hidden = !message;
+  };
+  let historyEntries = [];
+
+  function readProgress(entry) {
+    const key = entry.language === 'en'
+      ? 'ss:' + entry.id
+      : 'ss:' + entry.id + ':' + (entry.language || 'und');
+    let progress;
+    try {
+      const saved = localStorage.getItem(key);
+      progress = saved ? JSON.parse(saved) : {};
+    } catch (error) {
+      throw new Error('Không đọc được tiến độ shadowing: ' + error.message);
+    }
+    const source = progress && progress.shadow && typeof progress.shadow === 'object'
+      ? progress.shadow : {};
+    const scores = Object.entries(source)
+      .filter(([index, score]) => Number.isInteger(Number(index)) &&
+        Number(index) >= 0 && Number(index) < entry.lines.length &&
+        Number.isFinite(Number(score)) && Number(score) >= 0 && Number(score) <= 100)
+      .map(([index, score]) => [Number(index), Number(score)]);
+    const practiced = new Map(scores);
+    const completed = scores.filter(([, score]) => score >= 80).length;
+    const average = scores.length
+      ? Math.round(scores.reduce((total, [, score]) => total + score, 0) / scores.length)
+      : null;
+    let resumeAt = entry.lines.findIndex((_, index) => !practiced.has(index) || practiced.get(index) < 80);
+    if (resumeAt < 0) resumeAt = 0;
+    return { practiced: scores.length, completed, average, resumeAt };
+  }
+
+  function openUrl(entry, mode, at) {
+    const query = new URLSearchParams({ mode, lang: entry.language || 'auto', at: String(at) });
+    return 'index.html?' + query.toString() + '#' + encodeURIComponent(entry.id);
+  }
+
+  function render() {
+    const query = $('#search').value.trim().toLocaleLowerCase('vi');
+    const entries = historyEntries
+      .filter(entry => [entry.title, entry.id, entry.language]
+        .some(value => String(value || '').toLocaleLowerCase('vi').includes(query)))
+      .sort((a, b) => Number(b.viewedAt || 0) - Number(a.viewedAt || 0));
+    let totalPracticed = 0;
+    const cards = [];
+    for (const entry of entries) {
+      let progress;
+      try {
+        progress = readProgress(entry);
+      } catch (error) {
+        notice(error.message);
+        progress = { practiced: 0, completed: 0, average: null, resumeAt: 0 };
+      }
+      const sentenceCount = entry.lines.length;
+      totalPracticed += progress.practiced;
+      const percent = sentenceCount ? Math.round(progress.practiced / sentenceCount * 100) : 0;
+      const viewedAt = Number(entry.viewedAt);
+      const date = Number.isFinite(viewedAt) && viewedAt > 0
+        ? new Date(viewedAt).toLocaleString('vi-VN', { dateStyle: 'medium', timeStyle: 'short' })
+        : 'Chưa rõ thời gian';
+      const complete = sentenceCount > 0 && progress.completed === sentenceCount;
+      cards.push(
+        '<article class="card">' +
+          '<h2>' + escapeHtml(entry.title || entry.id) + '</h2>' +
+          '<div class="meta"><span>' + escapeHtml(entry.language || 'und') + '</span><span>' +
+            sentenceCount + ' câu</span><span>Học gần nhất: ' + escapeHtml(date) + '</span></div>' +
+          '<div class="progress-label"><span>Đã shadowing ' + progress.practiced + '/' + sentenceCount + ' câu' +
+            (complete ? '<span class="complete">Hoàn thành</span>' : '') + '</span><span>' + percent + '%</span></div>' +
+          '<div class="bar" role="progressbar" aria-label="Tiến độ shadowing" aria-valuenow="' +
+            percent + '" aria-valuemin="0" aria-valuemax="100"><span style="width:' + percent + '%"></span></div>' +
+          '<p class="score">' + (progress.average == null
+            ? 'Chưa có điểm shadowing.'
+            : 'Điểm shadowing trung bình: ' + progress.average + '/100 · ' + progress.completed + '/' +
+              sentenceCount + ' câu đạt từ 80 điểm') + '</p>' +
+          '<div class="actions"><a class="button primary" href="' +
+            escapeHtml(openUrl(entry, 'shadow', progress.resumeAt)) + '">' +
+            (progress.practiced ? 'Tiếp tục shadowing' : 'Bắt đầu shadowing') + '</a>' +
+            '<a class="button" href="' + escapeHtml(openUrl(entry, 'watch', 0)) + '">Mở video</a></div>' +
+        '</article>'
+      );
+    }
+    $('#videos').innerHTML = cards.join('');
+    $('#stats').textContent = entries.length
+      ? entries.length + ' video · ' + totalPracticed + ' câu đã shadowing'
+      : '';
+    const empty = $('#empty');
+    empty.hidden = entries.length > 0;
+    empty.textContent = historyEntries.length
+      ? 'Không tìm thấy video phù hợp.'
+      : 'Chưa có video nào trong lịch sử. Hãy dán link YouTube ở trang học; video sẽ được lưu tại đây trên trình duyệt này.';
+  }
+
+  try {
+    const raw = localStorage.getItem('ss:history');
+    const saved = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(saved)) throw new Error('Dữ liệu lịch sử video không đúng định dạng.');
+    historyEntries = saved.filter(entry => entry && validId(entry.id) && Array.isArray(entry.lines));
+    if (historyEntries.length !== saved.length) notice('Một số mục lịch sử không hợp lệ đã được bỏ qua.');
+    render();
+  } catch (error) {
+    notice('Không đọc được lịch sử video trong trình duyệt: ' + error.message);
+    $('#empty').textContent = 'Hãy quay lại trang học hoặc kiểm tra quyền lưu trữ của trình duyệt.';
+    $('#empty').hidden = false;
+  }
+  $('#search').addEventListener('input', render);
+})();
+</script>
+</body>
+</html>

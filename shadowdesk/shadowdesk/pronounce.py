@@ -31,6 +31,21 @@ def pronounce(text, language):
         romaji = re.sub(r"\s+([、。！？,.!?])", r"\1", romaji)
         return {"text": kana + " · " + romaji, "label": "Kana · Romaji"}
 
+    if base == "th":
+        from pythainlp.tokenize import word_tokenize
+        from pythainlp.transliterate import romanize, transliterate
+
+        tokens = word_tokenize(text, engine="newmm", keep_whitespace=False)
+        rtgs = " ".join(
+            romanize(token, engine="royin") if re.search(r"[\u0e00-\u0e7f]", token) else token
+            for token in tokens
+        )
+        try:
+            ipa = transliterate(text, engine="tltk_ipa")
+        except ImportError:
+            return {"text": rtgs, "label": "RTGS"}
+        return {"text": rtgs + " · " + ipa, "label": "RTGS · IPA (TLTK tones)"}
+
     gruut_language = {"en": "en-us", "it": "it-it"}.get(base)
     if gruut_language:
         from gruut import sentences
@@ -45,7 +60,7 @@ def pronounce(text, language):
             return {"text": "/" + " ".join(words) + "/", "label": "IPA"}
         return {"text": "", "label": "IPA"}
 
-    raise ValueError("Phiên âm hiện hỗ trợ tiếng Trung, Nhật, Anh và Ý.")
+    raise ValueError("Phiên âm hiện hỗ trợ tiếng Trung, Nhật, Anh, Ý và Thái.")
 
 
 language = sys.argv[1] if len(sys.argv) > 1 else "und"

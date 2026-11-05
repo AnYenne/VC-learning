@@ -50,8 +50,48 @@ function parseCaptionXml(xml) {
   return out;
 }
 
+async function splitThaiCues(cues) {
+  const command = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+  const output = await run(
+    command,
+    [path.join(__dirname, 'split_thai.py')],
+    undefined,
+    JSON.stringify(cues.map(cue => cue.text || '')),
+  );
+  const sentences = JSON.parse(output);
+  return cues.flatMap((cue, index) => {
+    const parts = Array.isArray(sentences[index]) && sentences[index].length
+      ? sentences[index]
+      : [cue.text];
+    if (parts.length === 1) return [cue];
+    const weights = parts.map(part => Math.max(1, [...part].length));
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    let elapsed = 0;
+    return parts.map((text, partIndex) => {
+      const start = cue.start + (cue.end - cue.start) * elapsed / total;
+      elapsed += weights[partIndex];
+      const end = partIndex === parts.length - 1
+        ? cue.end
+        : cue.start + (cue.end - cue.start) * elapsed / total;
+      return { start, end, text: text.trim() };
+    });
+  });
+}
+
 // Tách theo dấu câu; với phụ đề chữ Hán không dấu câu thì giữ ranh giới cue.
-function mergeCues(cues, locale) {
+async function mergeCues(cues, locale) {
+  const thai = /^th(?:-|$)/i.test(locale || '');
+  if (thai) {
+    const lines = await splitThaiCues(cues).then(parts => parts.filter(cue => cue.text && cue.text.trim()));
+    for (let i = 0; i < lines.length - 1; i++) {
+      if (lines[i].end > lines[i + 1].start) lines[i].end = lines[i + 1].start;
+    }
+    return lines.map(line => ({
+      start: Math.round(line.start * 100) / 100,
+      end: Math.round(line.end * 100) / 100,
+      text: line.text.trim(),
+    }));
+  }
   const timedParts = [];
   const compactScript = /^(zh|ja|th|lo|km|my)(?:-|$)/i.test(locale || '');
   let text = '';
@@ -217,7 +257,7 @@ async function getTranscript(id, lang) {
   }
   return {
     id, title, auto: pick.kind === 'asr', language: pick.languageCode,
-    languages, lines: mergeCues(cues, pick.languageCode),
+    languages, lines: await mergeCues(cues, pick.languageCode),
   };
 }
 
@@ -350,7 +390,7 @@ async function runAsr(id, job) {
     const data = {
       id, title, auto: true, ai: true, language,
       languages: [{ code: language, name: detected?.languageName || language }],
-      lines: mergeCues(cues, language),
+      lines: await mergeCues(cues, language),
     };
     fs.writeFileSync(path.join(CACHE, id + '.json'), JSON.stringify(data));
     job.state = 'done';
@@ -378,12 +418,13 @@ function asrStart(id) {
 /* ---------- dịch ---------- */
 
 const tcache = new Map();
+const pendingTranslations = new Map();
 function translationLanguage(language) {
   const value = (language || 'auto').trim();
   if (!value || value.toLowerCase() === 'und') return 'auto';
   if (/^zh(?:-Hans|-CN|-SG)?$/i.test(value)) return 'zh-CN';
   if (/^zh(?:-Hant|-TW|-HK|-MO)$/i.test(value)) return 'zh-TW';
-  return value;
+  return value.split('-')[0].toLowerCase();
 }
 
 function googleTranslationText(data) {
@@ -393,49 +434,99 @@ function googleTranslationText(data) {
   return typeof data[0] === 'string' ? data[0].trim() : '';
 }
 
+function translationChunks(q, sl, tl) {
+  const segmenter = new Intl.Segmenter(sl === 'auto' ? 'und' : sl, { granularity: 'word' });
+  const pieces = [...segmenter.segment(q)].map(item => item.segment);
+  const chunks = [];
+  let chunk = '';
+  const tooLong = text =>
+    new URLSearchParams({ q: text, langpair: sl + '|' + tl }).toString().length > 1200;
+  for (const piece of pieces) {
+    if (chunk && tooLong(chunk + piece)) {
+      chunks.push(chunk);
+      chunk = '';
+    }
+    if (tooLong(piece)) {
+      const graphemes = [...new Intl.Segmenter(sl === 'auto' ? 'und' : sl, { granularity: 'grapheme' }).segment(piece)]
+        .map(item => item.segment);
+      for (const grapheme of graphemes) {
+        if (chunk && tooLong(chunk + grapheme)) {
+          chunks.push(chunk);
+          chunk = '';
+        }
+        chunk += grapheme;
+      }
+    } else {
+      chunk += piece;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
 async function translateWithGoogle(q, sl, tl) {
-  const url = new URL('https://clients5.google.com/translate_a/t');
-  url.search = new URLSearchParams({ client: 'dict-chrome-ex', sl, tl, q }).toString();
-  const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error('Google Translate trả lỗi ' + r.status);
-  const text = googleTranslationText(await r.json());
-  if (!text) throw new Error('Google Translate trả về bản dịch rỗng.');
-  return text;
+  const chunks = q.includes('\n') ? [q] : translationChunks(q, sl, tl);
+  const translated = [];
+  for (const chunk of chunks) {
+    const url = new URL('https://clients5.google.com/translate_a/t');
+    url.search = new URLSearchParams({ client: 'dict-chrome-ex', sl, tl, q: chunk }).toString();
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('Google Translate trả lỗi ' + r.status);
+    const text = googleTranslationText(await r.json());
+    if (!text) throw new Error('Google Translate trả về bản dịch rỗng.');
+    translated.push(text);
+  }
+  return translated.join(tl === 'zh-CN' || tl === 'zh-TW' || tl === 'ja' ? '' : ' ');
 }
 
 async function translateWithMyMemory(q, sl, tl) {
-  const url = new URL('https://api.mymemory.translated.net/get');
-  url.search = new URLSearchParams({ q, langpair: sl + '|' + tl }).toString();
-  const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error('MyMemory trả lỗi ' + r.status);
-  const data = await r.json();
-  if (data.responseStatus !== 200 || data.quotaFinished) {
-    throw new Error(data.responseDetails || 'MyMemory không thể dịch yêu cầu này.');
+  const chunks = translationChunks(q, sl, tl);
+  const translated = [];
+  for (const chunk of chunks) {
+    const url = new URL('https://api.mymemory.translated.net/get');
+    url.search = new URLSearchParams({ q: chunk, langpair: sl + '|' + tl }).toString();
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('MyMemory trả lỗi ' + r.status);
+    const data = await r.json();
+    if (data.responseStatus !== 200 || data.quotaFinished) {
+      throw new Error(data.responseDetails || 'MyMemory không thể dịch yêu cầu này.');
+    }
+    const text = (data.responseData?.translatedText || '').trim();
+    if (!text) throw new Error('MyMemory trả về bản dịch rỗng.');
+    translated.push(text);
   }
-  const text = (data.responseData?.translatedText || '').trim();
-  if (!text) throw new Error('MyMemory trả về bản dịch rỗng.');
-  return text;
+  return translated.join(tl === 'zh-CN' || tl === 'zh-TW' || tl === 'ja' ? '' : ' ');
 }
 
-async function gt(q, tl, sourceLang) {
+async function gt(q, tl, sourceLang, allowFallback = true) {
   const sl = translationLanguage(sourceLang || 'auto');
   const target = translationLanguage(tl || 'vi');
   const key = sl + '|' + target + '|' + q;
   if (tcache.has(key)) return tcache.get(key);
-  try {
-    const text = await translateWithGoogle(q, sl, target);
-    tcache.set(key, text);
-    return text;
-  } catch (googleError) {
-    try {
-      const text = await translateWithMyMemory(q, sl, target);
-      tcache.set(key, text);
-      return text;
-    } catch (fallbackError) {
-      const error = new Error('Dịch thất bại. Google: ' + googleError.message + '; MyMemory: ' + fallbackError.message);
-      error.status = 502;
-      throw error;
+  if (pendingTranslations.has(key)) return pendingTranslations.get(key);
+  const translators = [translateWithGoogle, translateWithMyMemory];
+  if (!allowFallback) translators.length = 1;
+  const translation = (async () => {
+    const errors = [];
+    for (const translate of translators) {
+      try {
+        const text = await translate(q, sl, target);
+        tcache.set(key, text);
+        return text;
+      } catch (error) {
+        const provider = translate === translateWithGoogle ? 'Google' : 'MyMemory';
+        errors.push(provider + ': ' + error.message);
+      }
     }
+    const error = new Error('Dịch thất bại. ' + errors.join('; '));
+    error.status = 502;
+    throw error;
+  })();
+  pendingTranslations.set(key, translation);
+  try {
+    return await translation;
+  } finally {
+    pendingTranslations.delete(key);
   }
 }
 
@@ -443,18 +534,68 @@ async function translateMany(lines, tl, sourceLang) {
   const out = new Array(lines.length).fill('');
   const failed = [];
   const errors = [];
+  const sl = translationLanguage(sourceLang || 'auto');
+  const target = translationLanguage(tl || 'vi');
+  const unique = new Map();
+  lines.forEach((value, index) => {
+    const text = String(value || '').replace(/\s*\r?\n\s*/g, ' ').trim();
+    if (!text) return;
+    const key = sl + '|' + target + '|' + text;
+    if (tcache.has(key)) {
+      out[index] = tcache.get(key);
+      return;
+    }
+    if (!unique.has(text)) unique.set(text, []);
+    unique.get(text).push(index);
+  });
+  const items = [...unique].map(([text, indices]) => ({ text, indices }));
+  const groups = [];
+  let group = [];
+  let groupQuery = '';
+  for (const item of items) {
+    const nextQuery = groupQuery ? groupQuery + '\n' + item.text : item.text;
+    const encodedLength = new URLSearchParams({ client: 'dict-chrome-ex', sl, tl: target, q: nextQuery }).toString().length;
+    if (group.length && (group.length >= 20 || encodedLength > 4800)) {
+      groups.push({ items: group, query: groupQuery });
+      group = [];
+      groupQuery = '';
+    }
+    group.push(item);
+    groupQuery = groupQuery ? groupQuery + '\n' + item.text : item.text;
+  }
+  if (group.length) groups.push({ items: group, query: groupQuery });
   let next = 0;
   async function worker() {
-    while (next < lines.length) {
-      const i = next++;
-      try { out[i] = await gt(lines[i], tl, sourceLang); }
-      catch (e) {
-        failed.push(i);
-        if (errors.length < 3) errors.push(e.message);
+    while (next < groups.length) {
+      const current = groups[next++];
+      try {
+        const translated = (await gt(current.query, target, sl, false))
+          .split(/\r?\n/)
+          .map(text => text.trim());
+        if (translated.length !== current.items.length || translated.some(text => !text)) {
+          throw new Error('Dịch vụ không giữ được ranh giới giữa các câu.');
+        }
+        current.items.forEach((item, i) => {
+          tcache.set(sl + '|' + target + '|' + item.text, translated[i]);
+          item.indices.forEach(index => { out[index] = translated[i]; });
+        });
+      } catch (groupError) {
+        const fallback = await Promise.all(current.items.map(async item => {
+          try { return { item, text: await gt(item.text, target, sl) }; }
+          catch (error) { return { item, error }; }
+        }));
+        for (const result of fallback) {
+          if (result.error) {
+            failed.push(...result.item.indices);
+            if (errors.length < 3) errors.push(result.error.message || groupError.message);
+          } else {
+            result.item.indices.forEach(index => { out[index] = result.text; });
+          }
+        }
       }
     }
   }
-  await Promise.all(Array.from({ length: 3 }, worker));
+  await Promise.all(Array.from({ length: Math.min(5, groups.length) }, worker));
   return { translations: out, failed, errors };
 }
 
@@ -513,9 +654,12 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse(await readBody(req));
       const lines = Array.isArray(body.lines) ? body.lines.slice(0, 1500) : [];
       const sl = body.sl || 'auto';
+      const pronunciationTask = body.pronounce === false
+        ? Promise.resolve({ value: [] })
+        : pronounceMany(lines, sl).then(value => ({ value }), error => ({ error: error.message }));
       const [result, pronunciations] = await Promise.all([
         translateMany(lines, body.tl || 'vi', sl),
-        pronounceMany(lines, sl).then(value => ({ value }), error => ({ error: error.message })),
+        pronunciationTask,
       ]);
       return send(res, 200, {
         t: result.translations,
@@ -544,4 +688,4 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) server.listen(PORT, () => console.log('ShadowDesk chạy tại http://localhost:' + PORT));
-module.exports = { parseCaptionXml, mergeCues };
+module.exports = { parseCaptionXml, mergeCues, translationChunks };

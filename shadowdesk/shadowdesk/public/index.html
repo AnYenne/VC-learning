@@ -114,11 +114,24 @@
   .bd.mid { color: var(--warn); } .bd.low { color: var(--bad); }
   .status { padding: 8px 14px; font-size: 13px; color: var(--mute); }
   .status.err { color: var(--bad); }
+  .history { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .history summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  .history-items { display: grid; gap: 5px; max-height: 180px; overflow-y: auto; margin-top: 8px; }
+  .history-item { width: 100%; text-align: left; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 12px; }
+  .history-item small { display: block; color: var(--mute); }
+  .exercise-question { font-size: 18px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+  .exercise-answer { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .exercise-choices { display: grid; gap: 8px; }
+  .exercise-choices button { text-align: left; }
+  .exercise-result { padding: 10px; border-radius: 8px; background: var(--okbg); color: var(--ok); }
+  .exercise-result.wrong { background: var(--badbg); color: var(--bad); }
+  .cloze-blank { display: inline-block; min-width: 56px; padding: 0 8px; border-bottom: 2px solid var(--accent); color: var(--accent); }
 
   #tip { position: absolute; z-index: 20; width: min(280px, calc(100vw - 16px)); background: var(--ink); color: var(--bg); padding: 10px 12px; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.28); font-size: 14px; }
   #tip[hidden] { display: none; }
   #tip b { font-size: 16px; }
   #tip button { margin-top: 6px; padding: 3px 9px; border-radius: 6px; border: 1px solid currentColor; background: none; font-size: 12px; }
+  .library-link { text-decoration: none; white-space: nowrap; }
 
   @media (max-width: 920px) {
     main { grid-template-columns: minmax(0, 1fr); padding: 12px; }
@@ -132,6 +145,7 @@
 
 <header class="top">
   <div class="brand">Shadow<span>Desk</span></div>
+  <a class="btn library-link" href="history.html">Video đã học</a>
   <form id="f">
     <input id="url" type="text" placeholder="Dán link YouTube (hoặc mã video 11 ký tự)" autocomplete="off">
     <button class="btn primary" id="go">Tải video</button>
@@ -183,6 +197,7 @@
       <button role="tab" data-mode="watch" aria-selected="true">Xem</button>
       <button role="tab" data-mode="shadow" aria-selected="false">Shadowing</button>
       <button role="tab" data-mode="dict" aria-selected="false">Chính tả</button>
+      <button role="tab" data-mode="review" aria-selected="false">Ôn tập</button>
     </nav>
 
     <div class="panel" id="p-watch">
@@ -231,9 +246,40 @@
         <div class="diff" id="d-diff"></div>
       </div>
     </div>
+
+    <div class="panel" id="p-review" hidden>
+      <div class="row">
+        <label class="hint">Phạm vi ôn
+          <select id="reviewScope">
+            <option value="video">Video đang học</option>
+            <option value="all">Tất cả video đã học</option>
+          </select>
+        </label>
+        <button class="btn primary" id="reviewStart">Bắt đầu bài ôn</button>
+      </div>
+      <p class="hint" id="reviewProgress">Bài ôn luân phiên: điền từ, chọn từ, dịch câu, phát âm câu và nghĩa từ.</p>
+      <div id="reviewExercise" hidden>
+        <div class="hint" id="reviewType"></div>
+        <div class="exercise-question" id="reviewQuestion"></div>
+        <p class="hint" id="reviewHint" hidden></p>
+        <div class="exercise-choices" id="reviewChoices" hidden></div>
+        <input class="exercise-answer" id="reviewAnswer" autocomplete="off" hidden>
+        <div class="row">
+          <button class="btn" id="reviewSpeak" hidden>🎙 Đọc câu</button>
+          <button class="btn primary" id="reviewCheck">Kiểm tra</button>
+          <button class="btn" id="reviewNext" hidden>Câu tiếp theo</button>
+          <button class="btn" id="reviewListen" hidden>🔊 Nghe câu</button>
+        </div>
+        <div id="reviewResult" hidden></div>
+      </div>
+    </div>
   </section>
 
   <aside class="list">
+    <details class="history" id="historyPanel">
+      <summary>Video đã học</summary>
+      <div class="history-items" id="historyItems"></div>
+    </details>
     <div class="listhead"><b id="title">Transcript</b><span id="count"></span></div>
     <div class="status" id="status" hidden></div>
     <div class="status" style="padding-top:0"><button class="btn primary" id="asr" hidden>Tạo phụ đề bằng AI</button></div>
@@ -256,9 +302,13 @@
   const state = {
     id: null, title: '', lines: [], vi: [], cur: -1, mode: 'watch',
     player: null, ready: false, stopAt: null, loop: false, holdLine: false, pending: null,
+    loadToken: 0, translateToken: 0, codecFallbackFor: null,
     tl: store.get('ss:tl', 'vi'), sourceLang: store.get('ss:sourceLang', 'auto'),
     pronunciations: [],
     analysis: null,
+    history: Array.isArray(store.get('ss:history', [])) ? store.get('ss:history', []) : [],
+    exerciseQueue: [], exerciseIndex: 0,
+    exerciseCurrent: null, exerciseResults: { correct: 0, total: 0 }, exerciseWordCache: new Map(),
     language: 'und', progress: { shadow: {}, dict: {} }, dictHints: 0, rec: null, mine: null,
   };
 
@@ -289,10 +339,56 @@
   };
   const setStatus = (msg, err) => { const s = $('#status'); s.hidden = !msg; s.textContent = msg || ''; s.classList.toggle('err', !!err); };
   const label = n => n >= 90 ? 'Rất chuẩn' : n >= 75 ? 'Tốt' : n >= 55 ? 'Khá, thử lại nhé' : 'Cần luyện thêm';
+  const historyKey = entry => entry.id + '|' + entry.language;
+  function renderHistory() {
+    const box = $('#historyItems');
+    const entries = [...state.history].sort((a, b) => b.viewedAt - a.viewedAt);
+    box.innerHTML = entries.length ? entries.map((entry, index) =>
+      '<button class="history-item" data-history="' + index + '">' + esc(entry.title || entry.id) +
+      '<small>' + esc(entry.language || 'und') + ' · ' + (entry.lines || []).length + ' câu · ' +
+      esc(new Date(entry.viewedAt).toLocaleDateString()) + '</small></button>').join('') :
+      '<span class="hint">Video đã tải sẽ xuất hiện ở đây.</span>';
+  }
+  function saveStudy(translationsReady) {
+    if (!state.id || !state.lines.length) return;
+    const key = state.id + '|' + state.language;
+    const previous = state.history.find(item => historyKey(item) === key);
+    const entry = {
+      id: state.id, title: state.title, language: state.language, languages: state.languages || [],
+      lines: state.lines.map(line => ({ start: line.start, end: line.end, text: line.text })),
+      viewedAt: Date.now(),
+    };
+    if (translationsReady && state.vi.length) {
+      entry.tl = state.tl;
+      entry.vi = [...state.vi];
+    } else if (previous?.vi) {
+      entry.tl = previous.tl;
+      entry.vi = previous.vi;
+    }
+    let entries = [entry, ...state.history.filter(item => historyKey(item) !== historyKey(entry))]
+      .sort((a, b) => b.viewedAt - a.viewedAt);
+    let removed = 0;
+    while (entries.length) {
+      try {
+        localStorage.setItem('ss:history', JSON.stringify(entries));
+        state.history = entries;
+        renderHistory();
+        if (removed) setStatus('Bộ nhớ trình duyệt gần đầy; đã bỏ ' + removed + ' video cũ khỏi lịch sử.', true);
+        return;
+      } catch (error) {
+        if (entries.length === 1) {
+          setStatus('Không lưu được lịch sử video vào bộ nhớ trình duyệt: ' + error.message, true);
+          return;
+        }
+        entries = entries.slice(0, -1);
+        removed++;
+      }
+    }
+  }
 
   /* ---------- YouTube player ---------- */
   let apiReady = false;
-  window.onYouTubeIframeAPIReady = () => { apiReady = true; if (state.pending) { makePlayer(state.pending); state.pending = null; } };
+  window.onYouTubeIframeAPIReady = () => { apiReady = true; if (state.pending) makePlayer(state.pending); };
   const tag = document.createElement('script');
   tag.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(tag);
@@ -300,21 +396,42 @@
   function makePlayer(id) {
     state.player = new YT.Player('player', {
       videoId: id,
-      playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0 },
+      playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, autoplay: 0, origin: location.origin },
       events: {
-        onReady: () => { state.ready = true; state.player.setPlaybackRate(+$('#rate').value); },
+        onReady: () => {
+          state.ready = true;
+          state.player.setPlaybackRate(+$('#rate').value);
+          if (state.pending) {
+            const pending = state.pending;
+            state.pending = null;
+            if (pending !== id) state.player.cueVideoById(pending);
+          }
+        },
         onStateChange: event => {
           if (event.data === YT.PlayerState.PLAYING && state.stopAt == null) state.holdLine = false;
+          if (event.data === YT.PlayerState.PLAYING &&
+              $('#status').textContent.startsWith('Không phát được định dạng video')) setStatus('');
         },
-        onError: () => setStatus('Video này không cho phép nhúng hoặc không phát được.', true),
+        onError: event => {
+          if (event.data === 5 && state.codecFallbackFor !== state.id) {
+            state.codecFallbackFor = state.id;
+            setStatus('Không phát được định dạng video đầu tiên; đang thử chất lượng tương thích hơn…');
+            state.player.cueVideoById({ videoId: state.id, suggestedQuality: 'medium' });
+            return;
+          }
+          setStatus('YouTube không phát được video này (mã lỗi ' + event.data + ').', true);
+        },
       },
     });
   }
   function openVideo(id) {
     $('#empty').hidden = true;
-    if (state.player && state.ready) { state.player.loadVideoById(id); state.player.pauseVideo(); }
-    else if (apiReady && !state.player) makePlayer(id);
-    else if (!state.player) state.pending = id;
+    if (state.player && state.ready) {
+      state.pending = null;
+      state.player.cueVideoById(id);
+    }
+    else if (apiReady && !state.player) { state.pending = null; makePlayer(id); }
+    else state.pending = id;
   }
 
   function playLine(i, loop, rate) {
@@ -500,15 +617,18 @@
 
   /* ---------- tải video ---------- */
   async function loadVideo(id) {
+    const token = ++state.loadToken;
     setStatus('Đang lấy phụ đề…');
     $('#lines').innerHTML = ''; $('#title').textContent = 'Transcript'; $('#count').textContent = '';
     state.lines = []; state.vi = []; state.pronunciations = []; state.analysis = null; state.cur = -1; renderCap();
     $('#asr').hidden = true;
     state.id = id; state.lines = []; state.stopAt = null; state.holdLine = false;
+    state.codecFallbackFor = null;
     openVideo(id);
     try {
       const r = await fetch('/api/transcript?v=' + id + '&lang=' + encodeURIComponent(state.sourceLang));
       const j = await r.json();
+      if (token !== state.loadToken) return;
       if (!r.ok) {
         if (j.languages) {
           renderLanguageOptions(j.languages);
@@ -523,12 +643,18 @@
         throw new Error(j.error || 'Không lấy được phụ đề.');
       }
       await applyTranscript(id, j);
-    } catch (e) { setStatus(e.message, true); }
+    } catch (e) { if (token === state.loadToken) setStatus(e.message, true); }
   }
   async function applyTranscript(id, j) {
     state.id = id; state.title = j.title; state.lines = j.lines; state.auto = j.auto; state.ai = !!j.ai;
     state.language = j.language || 'und';
+    state.languages = j.languages || [];
     state.pronunciations = [];
+    if (j.translations && j.translatedTo === state.tl) {
+      state.vi = [...j.translations];
+    } else {
+      state.vi = [];
+    }
     if (state.sourceLang !== 'auto' && state.sourceLang.split('-')[0] === 'zh' &&
         state.language.split('-')[0] === 'zh') {
       state.sourceLang = state.language;
@@ -542,7 +668,12 @@
     renderList(); setCur(0, false);
     history.replaceState(null, '', '#' + id);
     store.set('ss:last', id);
-    await translateAll();
+    saveStudy(false);
+    if (j.translations && j.translatedTo === state.tl) {
+      renderList(); setCur(0, false);
+    } else {
+      await translateAll();
+    }
   }
   function renderLanguageOptions(languages) {
     const select = $('#sourceLang');
@@ -609,36 +740,376 @@
   async function translateAll() {
     if (!state.lines.length) return;
     const myId = state.id, myTl = state.tl, myLang = state.language;
-    setStatus('Đang dịch…');
+    const token = ++state.translateToken;
+    const lines = state.lines.map(l => l.text);
+    const batchSize = 100;
+    const batches = [];
+    for (let start = 0; start < lines.length; start += batchSize) {
+      batches.push({ start, lines: lines.slice(start, start + batchSize) });
+    }
+    state.vi = new Array(lines.length).fill('');
+    state.pronunciations = new Array(lines.length).fill(null);
+    const failed = [];
+    const errors = [];
+    let pronunciationError = '';
+    let completed = 0;
+    let nextBatch = 0;
+    renderList(); renderCap();
+    setStatus('Đang dịch 0/' + lines.length + ' câu…');
     try {
-      const r = await fetch('/api/translate-batch', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ lines: state.lines.map(l => l.text), tl: myTl, sl: myLang }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || 'Máy chủ không dịch được transcript.');
-      if (myId !== state.id || myTl !== state.tl || myLang !== state.language) return;
-      state.vi = j.t || [];
-      state.pronunciations = j.pronunciations || [];
-      renderList(); setCur(state.cur < 0 ? 0 : state.cur, false);
-      const failedCount = Array.isArray(j.failed) ? j.failed.length : 0;
+      async function worker() {
+        while (nextBatch < batches.length) {
+          if (token !== state.translateToken || myId !== state.id || myTl !== state.tl || myLang !== state.language) return;
+          const batch = batches[nextBatch++];
+          const r = await fetch('/api/translate-batch', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              lines: batch.lines, tl: myTl, sl: myLang,
+              pronounce: batch.start === 0,
+            }),
+            signal: AbortSignal.timeout(60000),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || 'Máy chủ không dịch được transcript.');
+          if (token !== state.translateToken || myId !== state.id || myTl !== state.tl || myLang !== state.language) return;
+          (j.t || []).forEach((text, index) => { state.vi[batch.start + index] = text; });
+          (j.pronunciations || []).forEach((item, index) => { state.pronunciations[batch.start + index] = item; });
+          (j.failed || []).forEach(index => failed.push(batch.start + index));
+          if (errors.length < 3) errors.push(...(j.errors || []).slice(0, 3 - errors.length));
+          if (j.pronunciationError) pronunciationError = j.pronunciationError;
+          completed += batch.lines.length;
+          renderList(); setCur(state.cur < 0 ? 0 : state.cur, false);
+          setStatus('Đang dịch ' + completed + '/' + lines.length + ' câu…');
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(2, batches.length) }, worker));
+      if (token !== state.translateToken || myId !== state.id || myTl !== state.tl || myLang !== state.language) return;
+      const failedCount = failed.length;
+      saveStudy(true);
       if (failedCount) {
         setStatus('Đã dịch ' + (state.vi.length - failedCount) + '/' + state.vi.length +
           ' câu. ' + failedCount + ' câu chưa dịch được.' +
-          (j.errors?.length ? ' ' + j.errors[0] : ' Kiểm tra kết nối hoặc thử lại.'), true);
-        if (j.pronunciationError) {
-          setStatus($('#status').textContent + ' Phiên âm chưa sẵn sàng: ' + j.pronunciationError, true);
-        }
+          (errors.length ? ' ' + errors[0] : ' Kiểm tra kết nối hoặc thử lại.') +
+          (pronunciationError ? ' Phiên âm chưa sẵn sàng: ' + pronunciationError : ''), true);
       } else {
-        if (j.pronunciationError) {
-          setStatus('Bản dịch đã xong nhưng phiên âm chưa sẵn sàng: ' + j.pronunciationError +
+        if (pronunciationError) {
+          setStatus('Bản dịch đã xong nhưng phiên âm chưa sẵn sàng: ' + pronunciationError +
             ' Cài pronunciation-requirements.txt theo README.', true);
         } else {
           setStatus(state.vi.some(Boolean) ? '' : 'Không nhận được bản dịch. Kiểm tra kết nối mạng của máy chủ.', !state.vi.some(Boolean));
         }
       }
-    } catch (e) { setStatus('Không dịch được: ' + e.message, true); }
+    } catch (e) {
+      if (token === state.translateToken) {
+        state.translateToken++;
+        setStatus('Không dịch được: ' + e.message, true);
+      }
+    }
   }
+
+  function reviewCorpus() {
+    const entries = [...state.history];
+    if (state.id && state.lines.length) {
+      const current = {
+        id: state.id, title: state.title, language: state.language, tl: state.tl,
+        lines: state.lines, vi: state.vi,
+      };
+      const key = historyKey(current);
+      const index = entries.findIndex(item => historyKey(item) === key);
+      if (index >= 0) entries[index] = current;
+      else entries.unshift(current);
+    }
+    return entries;
+  }
+  function randomItem(items) {
+    return items[Math.floor(Math.random() * items.length)];
+  }
+  function reviewWords(text, language) {
+    return Score.words(text, language).filter(word => /\p{L}|\p{N}/u.test(word));
+  }
+  function makeReviewQueue(scope) {
+    let entries = reviewCorpus();
+    if (scope === 'video') entries = entries.filter(entry => entry.id === state.id && entry.language === state.language);
+    const pool = entries.flatMap(entry => (entry.lines || []).map((line, index) => ({
+      entry,
+      line,
+      index,
+      sourceLanguage: entry.language || 'und',
+      translation: entry.tl === state.tl ? entry.vi?.[index] || '' : '',
+      targetLanguage: entry.tl || state.tl,
+    })).filter(item => item.line.text && reviewWords(item.line.text, item.sourceLanguage).length));
+    if (!pool.length) return [];
+    const types = ['cloze', 'choice', 'translate', 'pronounce', 'vocabulary'];
+    const count = Math.min(scope === 'all' ? 20 : 10, Math.max(types.length, pool.length));
+    return Array.from({ length: count }, (_, index) => {
+      const type = types[index % types.length];
+      let candidates = pool;
+      if (type === 'translate') candidates = pool.filter(item => item.translation);
+      if (!candidates.length) return null;
+      const item = randomItem(candidates);
+      const words = reviewWords(item.line.text, item.sourceLanguage);
+      return {
+        ...item,
+        type,
+        word: randomItem(words),
+        answered: false,
+        selected: '',
+      };
+    }).filter(Boolean);
+  }
+  const exerciseTypeNames = {
+    cloze: 'Điền chữ còn thiếu',
+    choice: 'Chọn từ phù hợp',
+    translate: 'Dịch câu sang ' + state.tl,
+    pronounce: 'Phát âm hoàn chỉnh câu',
+    vocabulary: 'Nhớ nghĩa của từ',
+  };
+  function showReviewQuestion() {
+    const question = state.exerciseQueue[state.exerciseIndex];
+    state.exerciseCurrent = question || null;
+    $('#reviewExercise').hidden = !question;
+    $('#reviewResult').hidden = true;
+    $('#reviewResult').className = 'exercise-result';
+    $('#reviewChoices').hidden = true;
+    $('#reviewChoices').innerHTML = '';
+    $('#reviewHint').hidden = true;
+    $('#reviewHint').textContent = '';
+    $('#reviewAnswer').hidden = true;
+    $('#reviewAnswer').value = '';
+    $('#reviewCheck').disabled = false;
+    $('#reviewSpeak').hidden = true;
+    $('#reviewListen').hidden = true;
+    $('#reviewCheck').hidden = true;
+    $('#reviewNext').hidden = true;
+    if (!question) {
+      $('#reviewProgress').textContent = state.exerciseQueue.length
+        ? 'Hoàn thành lượt ôn: ' + state.exerciseResults.correct + '/' + state.exerciseResults.total +
+          ' câu đúng. Bấm “Bắt đầu bài ôn” để luyện lượt mới.'
+        : 'Chưa có câu phù hợp để ôn. Hãy tải video và dịch transcript trước.';
+      return;
+    }
+    $('#reviewProgress').textContent = 'Câu ' + (state.exerciseIndex + 1) + '/' + state.exerciseQueue.length +
+      ' · ' + (question.entry.title || question.entry.id);
+    $('#reviewType').textContent = question.type === 'translate'
+      ? 'Dịch câu sang ' + question.targetLanguage
+      : exerciseTypeNames[question.type];
+    $('#reviewCheck').hidden = false;
+    if (question.type === 'cloze' || question.type === 'choice') {
+      const words = reviewWords(question.line.text, question.sourceLanguage);
+      const blankIndex = words.indexOf(question.word);
+      let index = -1;
+      const sentence = wordsHTML(question.line.text).replace(/<span class="w" data-w="([^"]*)">([^<]*)<\/span>/g,
+        (whole, _data, word) => {
+          index++;
+          return index === blankIndex ? '<span class="cloze-blank">_____</span>' : word;
+        });
+      $('#reviewQuestion').innerHTML = sentence;
+      if (question.type === 'cloze') {
+        $('#reviewAnswer').hidden = false;
+        $('#reviewAnswer').placeholder = 'Nhập từ còn thiếu';
+        if (words.length === 1) {
+          $('#reviewHint').hidden = false;
+          $('#reviewHint').textContent = 'Đang lấy nghĩa của từ…';
+          $('#reviewCheck').disabled = true;
+          reviewWordMeaning(question).then(meaning => {
+            if (state.exerciseCurrent !== question) return;
+            $('#reviewHint').textContent = 'Gợi ý nghĩa: ' + meaning;
+            $('#reviewCheck').disabled = false;
+          }).catch(error => {
+            if (state.exerciseCurrent !== question) return;
+            $('#reviewHint').textContent = 'Không lấy được nghĩa gợi ý: ' + error.message;
+            $('#reviewCheck').disabled = false;
+          });
+        }
+      } else {
+        const wordsInCorpus = poolWordsForLanguage(question.sourceLanguage)
+          .filter(word => Score.normW(word) !== Score.normW(question.word));
+        const distractors = [];
+        while (distractors.length < 3 && wordsInCorpus.length) {
+          const word = randomItem(wordsInCorpus);
+          if (!distractors.some(item => Score.normW(item) === Score.normW(word))) distractors.push(word);
+        }
+        const choices = [...new Set([question.word, ...distractors])].sort(() => Math.random() - 0.5);
+        $('#reviewChoices').hidden = false;
+        $('#reviewChoices').innerHTML = choices.map(word =>
+          '<button class="btn" type="button" data-choice="' + esc(word) + '">' + esc(word) + '</button>').join('');
+      }
+    } else if (question.type === 'translate') {
+      $('#reviewQuestion').textContent = question.line.text;
+      $('#reviewAnswer').hidden = false;
+      $('#reviewAnswer').placeholder = 'Nhập bản dịch';
+    } else if (question.type === 'pronounce') {
+      $('#reviewQuestion').textContent = question.line.text;
+      $('#reviewSpeak').hidden = false;
+      $('#reviewListen').hidden = false;
+      $('#reviewAnswer').hidden = false;
+      $('#reviewAnswer').placeholder = 'Bản nhận dạng giọng nói sẽ hiện ở đây';
+    } else {
+      $('#reviewQuestion').textContent = question.word;
+      $('#reviewAnswer').hidden = false;
+      $('#reviewAnswer').placeholder = 'Đang tra nghĩa…';
+      $('#reviewCheck').disabled = true;
+      reviewWordMeaning(question).then(meaning => {
+        if (state.exerciseCurrent !== question) return;
+        question.meaning = meaning;
+        $('#reviewAnswer').placeholder = 'Nhập nghĩa của từ';
+        $('#reviewCheck').disabled = false;
+      }).catch(error => {
+        if (state.exerciseCurrent === question) {
+          $('#reviewAnswer').placeholder = 'Không lấy được nghĩa: ' + error.message;
+          $('#reviewCheck').disabled = true;
+        }
+      });
+    }
+  }
+  function poolWordsForLanguage(language) {
+    return reviewCorpus().filter(entry => entry.language === language)
+      .flatMap(entry => (entry.lines || []).flatMap(line => reviewWords(line.text, language)));
+  }
+  async function reviewWordMeaning(question) {
+    const key = question.sourceLanguage + '|' + question.targetLanguage + '|' + question.word.toLowerCase();
+    if (state.exerciseWordCache.has(key)) return state.exerciseWordCache.get(key);
+    const params = new URLSearchParams({
+      q: question.word, sl: question.sourceLanguage, tl: question.targetLanguage,
+    });
+    const response = await fetch('/api/translate?' + params, { signal: AbortSignal.timeout(15000) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Dịch vụ dịch từ bị lỗi.');
+    const meaning = result.t || '';
+    if (!meaning) throw new Error('Dịch vụ không trả về nghĩa.');
+    state.exerciseWordCache.set(key, meaning);
+    return meaning;
+  }
+  function startReview() {
+    state.exerciseQueue = makeReviewQueue($('#reviewScope').value);
+    state.exerciseIndex = 0;
+    state.exerciseResults = { correct: 0, total: 0 };
+    if (!state.exerciseQueue.length) {
+      $('#reviewExercise').hidden = true;
+      $('#reviewProgress').textContent = $('#reviewScope').value === 'all'
+        ? 'Chưa có video đã học phù hợp. Hãy tải và học video trước.'
+        : 'Chưa có video hiện tại. Hãy tải video trước.';
+      return;
+    }
+    showReviewQuestion();
+    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+      $('#reviewSpeak').title = 'Trình duyệt này không hỗ trợ nhận giọng nói.';
+    }
+  }
+  function checkReviewAnswer(value) {
+    const question = state.exerciseCurrent;
+    if (!question || question.answered) return;
+    const answer = (value || $('#reviewAnswer').value).trim();
+    if (!answer) return;
+    let correct = false;
+    let expected = '';
+    if (question.type === 'cloze' || question.type === 'choice') {
+      expected = question.word;
+      correct = Score.normW(answer) === Score.normW(expected);
+    } else if (question.type === 'translate') {
+      expected = question.translation;
+      correct = Score.align(expected, answer, question.targetLanguage).score >= 80;
+    } else if (question.type === 'pronounce') {
+      expected = question.line.text;
+      correct = Score.align(expected, answer, question.sourceLanguage).score >= 75;
+    } else {
+      expected = question.meaning || '';
+      correct = !!expected && Score.align(expected, answer, question.targetLanguage).score >= 70;
+    }
+    question.answered = true;
+    state.exerciseResults.total++;
+    if (correct) state.exerciseResults.correct++;
+    const result = $('#reviewResult');
+    result.hidden = false;
+    result.className = 'exercise-result' + (correct ? '' : ' wrong');
+    result.textContent = (correct ? 'Chính xác! ' : 'Chưa đúng. Đáp án: ') + expected;
+    $('#reviewCheck').hidden = true;
+    $('#reviewNext').hidden = false;
+  }
+  function listenReviewSentence() {
+    const question = state.exerciseCurrent;
+    if (question?.line?.text) speakForLanguage(question.line.text, question.sourceLanguage);
+  }
+  function speakForLanguage(text, language) {
+    try {
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = speechLocale(language);
+      speechSynthesis.speak(utterance);
+    } catch (error) {
+      setStatus('Không phát được giọng đọc: ' + error.message, true);
+    }
+  }
+  function startReviewPronunciation() {
+    const question = state.exerciseCurrent;
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!question || !Recognition) {
+      setStatus('Trình duyệt này không hỗ trợ nhận dạng phát âm. Có thể nhập câu vào ô để tự đối chiếu.', true);
+      $('#reviewAnswer').focus();
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = speechLocale(question.sourceLanguage);
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = event => {
+      const heard = event.results[0][0].transcript.trim();
+      $('#reviewAnswer').value = heard;
+      checkReviewAnswer(heard);
+    };
+    recognition.onerror = event => setStatus('Không nhận được giọng nói: ' + event.error, true);
+    recognition.start();
+  }
+  $('#reviewStart').addEventListener('click', startReview);
+  $('#reviewCheck').addEventListener('click', () => checkReviewAnswer());
+  $('#reviewNext').addEventListener('click', () => {
+    state.exerciseIndex++;
+    showReviewQuestion();
+  });
+  $('#reviewListen').addEventListener('click', listenReviewSentence);
+  $('#reviewSpeak').addEventListener('click', startReviewPronunciation);
+  $('#reviewChoices').addEventListener('click', event => {
+    const button = event.target.closest('[data-choice]');
+    if (button) checkReviewAnswer(button.dataset.choice);
+  });
+  $('#reviewAnswer').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); checkReviewAnswer(); }
+  });
+  function openHistoryEntry(entry) {
+    state.loadToken++;
+    state.translateToken++;
+    const requestedAt = new URLSearchParams(location.search).get('at');
+    state.sourceLang = entry.language || 'auto';
+    store.set('ss:sourceLang', state.sourceLang);
+    const savedLanguages = entry.languages || [];
+    const languages = savedLanguages.some(language => language.code === state.sourceLang)
+      ? savedLanguages
+      : [...savedLanguages, { code: state.sourceLang, name: state.sourceLang }];
+    renderLanguageOptions(languages);
+    $('#url').value = 'https://www.youtube.com/watch?v=' + entry.id;
+    state.codecFallbackFor = null;
+    openVideo(entry.id);
+    applyTranscript(entry.id, {
+      id: entry.id, title: entry.title, lines: entry.lines, language: entry.language,
+      languages,
+      translations: entry.vi, translatedTo: entry.tl,
+    }).then(() => {
+      const index = Number(requestedAt);
+      if (state.mode === 'shadow' && requestedAt !== null &&
+          Number.isInteger(index) && index >= 0 && index < state.lines.length) {
+        setCur(index, false);
+      }
+    }).catch(error => setStatus('Không mở được video đã học: ' + error.message, true));
+  }
+  $('#historyItems').addEventListener('click', event => {
+    const button = event.target.closest('[data-history]');
+    if (!button) return;
+    const entries = [...state.history].sort((a, b) => b.viewedAt - a.viewedAt);
+    const entry = entries[+button.dataset.history];
+    if (!entry) return;
+    openHistoryEntry(entry);
+    $('#historyPanel').open = false;
+  });
 
   $('#f').addEventListener('submit', e => {
     e.preventDefault();
@@ -664,7 +1135,7 @@
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
     state.mode = b.dataset.mode;
     document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-    ['watch', 'shadow', 'dict'].forEach(m => { $('#p-' + m).hidden = m !== state.mode; });
+    ['watch', 'shadow', 'dict', 'review'].forEach(m => { $('#p-' + m).hidden = m !== state.mode; });
     document.body.className = document.body.className.replace(/mode-\w+/, 'mode-' + state.mode);
     if (state.mode !== 'shadow') document.body.classList.remove('hide-cap'); else document.body.classList.toggle('hide-cap', $('#s-hide').checked);
     if (state.mode !== 'watch') { stopRec(); }
@@ -805,8 +1276,28 @@
   });
 
   /* ---------- khởi động ---------- */
-  const start = parseId(location.hash.slice(1)) || store.get('ss:last', null);
-  if (start) { $('#url').value = 'https://www.youtube.com/watch?v=' + start; loadVideo(start); }
+  renderHistory();
+  const params = new URLSearchParams(location.search);
+  const requestedLanguage = params.get('lang');
+  if (requestedLanguage) {
+    state.sourceLang = requestedLanguage;
+    store.set('ss:sourceLang', state.sourceLang);
+  }
+  const requestedMode = params.get('mode');
+  if (['watch', 'shadow', 'dict', 'review'].includes(requestedMode)) {
+    const modeTab = document.querySelector('.tabs button[data-mode="' + requestedMode + '"]');
+    if (modeTab) modeTab.click();
+  }
+  const hashId = parseId(location.hash.slice(1));
+  const start = hashId || store.get('ss:last', null);
+  if (start) {
+    const saved = state.history
+      .filter(entry => entry.id === start)
+      .sort((a, b) => b.viewedAt - a.viewedAt)
+      .find(entry => state.sourceLang === 'auto' || entry.language === state.sourceLang);
+    if (saved) openHistoryEntry(saved);
+    else { $('#url').value = 'https://www.youtube.com/watch?v=' + start; loadVideo(start); }
+  }
 })();
 </script>
 </body>
