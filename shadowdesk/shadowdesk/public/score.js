@@ -95,7 +95,89 @@
     return { events, score, counts, total: n };
   }
 
-  const api = { align, normW, words, lev, sim };
+  function quantile(values, fraction) {
+    if (!values.length) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))];
+  }
+
+  function assessAcoustics(samples, sampleRate, expectedDuration) {
+    const factor = Math.max(1, Math.floor(sampleRate / 12000));
+    const rate = sampleRate / factor;
+    const frameSize = Math.round(rate * 0.04);
+    const hopSize = Math.round(rate * 0.02);
+    if (!samples || samples.length < frameSize * factor || !Number.isFinite(rate) || rate <= 0) return null;
+
+    const frameEnergy = [];
+    for (let start = 0; start + frameSize * factor <= samples.length; start += hopSize * factor) {
+      let sum = 0;
+      for (let i = 0; i < frameSize; i++) {
+        const value = samples[start + i * factor];
+        sum += value * value;
+      }
+      frameEnergy.push({ start, rms: Math.sqrt(sum / frameSize) });
+    }
+    const peak = frameEnergy.reduce((maximum, frame) => Math.max(maximum, frame.rms), 0);
+    if (peak < 0.004) return null;
+    const active = frameEnergy.map((frame, index) => ({ ...frame, index }))
+      .filter(frame => frame.rms >= Math.max(0.004, peak * 0.3));
+    if (active.length < 3) return null;
+
+    const dynamicRange = 20 * Math.log10(
+      Math.max(0.0001, quantile(active.map(frame => frame.rms), 0.85)) /
+      Math.max(0.0001, quantile(active.map(frame => frame.rms), 0.2))
+    );
+    const stress = Math.round(Math.max(0, 100 - Math.abs(dynamicRange - 11) * 4.5));
+
+    const minLag = Math.max(1, Math.floor(rate / 500));
+    const maxLag = Math.min(Math.floor(rate / 70), frameSize - 1);
+    const pitches = [];
+    for (const frame of active) {
+      const localStart = Math.max(0, frame.start - Math.floor(frameSize * factor / 2));
+      let mean = 0;
+      for (let i = 0; i < frameSize; i++) mean += samples[localStart + i * factor] || 0;
+      mean /= frameSize;
+      let bestLag = 0, bestCorrelation = 0;
+      for (let lag = minLag; lag <= maxLag; lag++) {
+        let cross = 0, left = 0, right = 0;
+        for (let i = 0; i < frameSize - lag; i++) {
+          const a = (samples[localStart + i * factor] || 0) - mean;
+          const b = (samples[localStart + (i + lag) * factor] || 0) - mean;
+          cross += a * b;
+          left += a * a;
+          right += b * b;
+        }
+        const correlation = cross / Math.sqrt(left * right || 1);
+        if (correlation > bestCorrelation) {
+          bestCorrelation = correlation;
+          bestLag = lag;
+        }
+      }
+      if (bestLag && bestCorrelation >= 0.35) pitches.push(rate / bestLag);
+    }
+    let intonation = null;
+    if (pitches.length >= 3) {
+      const semitones = pitches.map(pitch => 12 * Math.log2(pitch));
+      const center = quantile(semitones, 0.5);
+      const stablePitch = semitones.filter(value => Math.abs(value - center) <= 6);
+      if (stablePitch.length >= 3) {
+        const range = quantile(stablePitch, 0.9) - quantile(stablePitch, 0.1);
+        intonation = Math.round(Math.max(0, 100 - Math.abs(range - 7) * 7.5));
+      }
+    }
+
+    const first = active[0].index;
+    const last = active[active.length - 1].index;
+    const speechDuration = (last - first + 1) * hopSize / rate;
+    let rhythm = null;
+    if (Number.isFinite(expectedDuration) && expectedDuration > 0 && speechDuration > 0) {
+      const durationRatio = speechDuration / expectedDuration;
+      rhythm = Math.round(Math.max(0, 100 - Math.abs(Math.log2(durationRatio)) * 35));
+    }
+    return { rhythm, stress, intonation };
+  }
+
+  const api = { align, assessAcoustics, normW, words, lev, sim };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Score = api;
 })(typeof window !== 'undefined' ? window : this);

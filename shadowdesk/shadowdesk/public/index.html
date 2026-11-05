@@ -87,6 +87,13 @@
   .score b { font: 700 40px/1 var(--mono); }
   .score span { color: var(--mute); }
   .heard { font-size: 14px; color: var(--mute); margin: 0; }
+  .assessment { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .assessment h3 { margin: 0; font-size: 15px; }
+  .assessment-row { display: grid; grid-template-columns: 90px minmax(60px, 1fr) 36px; gap: 10px; align-items: center; font-size: 13px; }
+  .assessment-track { height: 8px; overflow: hidden; border-radius: 8px; background: var(--line); }
+  .assessment-fill { height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+  .assessment-value { font: 700 14px var(--mono); text-align: right; }
+  .assessment-note { margin: 0; color: var(--mute); font-size: 12px; }
   .diff { font-size: 18px; line-height: 2; display: flex; flex-wrap: wrap; gap: 2px 8px; }
   .diff .t { padding: 0 5px; border-radius: 4px; }
   .t.ok { background: var(--okbg); color: var(--ok); }
@@ -222,6 +229,8 @@
       <p class="hint" id="s-msg">Nghe câu mẫu, rồi bấm “Nói theo” và đọc lại. Cần Chrome hoặc Edge để nhận giọng nói.</p>
       <div id="s-out" hidden>
         <div class="score"><b id="s-num">0</b><span id="s-lab"></span></div>
+        <div class="assessment" id="s-assessment" aria-label="Đánh giá Shadowing"></div>
+        <p class="assessment-note" id="s-assessment-note"></p>
         <p class="heard" id="s-heard"></p>
         <div class="diff" id="s-diff"></div>
       </div>
@@ -514,7 +523,10 @@
       }
     }
     renderCap();
-    if (changed) resetExercises();
+    if (changed) {
+      resetExercises();
+      if (state.mode === 'shadow') restoreShadowAssessment();
+    }
   }
   function renderAnalysis() {
     const box = $('#analysisResult');
@@ -693,7 +705,10 @@
     return !requestedScript || !trackScript || requestedScript === trackScript;
   }
   function progressKey(id) {
-    return state.language === 'en' ? 'ss:' + id : 'ss:' + id + ':' + state.language;
+    return progressKeyFor(id, state.language);
+  }
+  function progressKeyFor(id, language) {
+    return language === 'en' ? 'ss:' + id : 'ss:' + id + ':' + language;
   }
   function speechLocale(language) {
     if (/^zh(?:$|-Hans(?:-|$)|-CN$|-SG$)/i.test(language)) return 'zh-CN';
@@ -1140,6 +1155,7 @@
     if (state.mode !== 'shadow') document.body.classList.remove('hide-cap'); else document.body.classList.toggle('hide-cap', $('#s-hide').checked);
     if (state.mode !== 'watch') { stopRec(); }
     state.stopAt = null; state.loop = false; state.holdLine = false;
+    if (state.mode === 'shadow') restoreShadowAssessment();
     refreshBadges(); updateMask();
   }));
 
@@ -1173,6 +1189,65 @@
     refreshBadges();
   }
 
+  const assessmentCriteria = [
+    { key: 'pronunciation', label: 'Phát âm' },
+    { key: 'rhythm', label: 'Nhịp điệu' },
+    { key: 'stress', label: 'Trọng âm' },
+    { key: 'intonation', label: 'Ngữ điệu' },
+  ];
+  function renderShadowAssessment(assessment) {
+    const metrics = assessment.metrics || {};
+    $('#s-num').textContent = assessment.score;
+    $('#s-lab').textContent = label(assessment.score);
+    $('#s-heard').textContent = assessment.heard ? 'Máy nghe được: “' + assessment.heard + '”' : '';
+    $('#s-assessment').innerHTML = assessmentCriteria.map(criterion => {
+      const value = criterion.key === 'pronunciation' ? assessment.score : metrics[criterion.key];
+      const display = value == null ? '—' : (criterion.key === 'pronunciation' ? '' : '~') + value;
+      return '<div class="assessment-row"><span>' + criterion.label + '</span>' +
+        '<div class="assessment-track" role="progressbar" aria-label="' + criterion.label +
+        '" aria-valuemin="0" aria-valuemax="100"' +
+        (value == null ? '' : ' aria-valuenow="' + value + '"') +
+        '><div class="assessment-fill" style="width:' + (value == null ? 0 : value) + '%"></div></div>' +
+        '<span class="assessment-value">' + display + '</span></div>';
+    }).join('');
+    $('#s-assessment-note').textContent = assessment.metrics
+      ? 'Phát âm dựa trên nhận dạng lời nói; nhịp điệu ước tính theo thời lượng câu. Trọng âm và ngữ điệu ước tính từ cường độ, cao độ bản ghi, không so trực tiếp với giọng gốc.'
+      : 'Các tiêu chí âm thanh sẽ hiện khi trình duyệt ghi và phân tích được bản thu.';
+    renderDiff($('#s-diff'), assessment.events || []);
+    $('#s-out').hidden = false;
+  }
+  function restoreShadowAssessment() {
+    const saved = state.progress.shadowDetails?.[state.cur];
+    if (saved && Number.isFinite(saved.score)) renderShadowAssessment(saved);
+  }
+  async function measureRecording(blob, expectedDuration) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) throw new Error('Trình duyệt không hỗ trợ phân tích âm thanh.');
+    const context = new AudioContext();
+    try {
+      const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+      return Score.assessAcoustics(buffer.getChannelData(0), buffer.sampleRate, expectedDuration);
+    } finally {
+      await context.close();
+    }
+  }
+  function saveShadowAssessment(videoId, language, index, score, metrics, heard, events) {
+    const key = progressKeyFor(videoId, language);
+    const progress = store.get(key, { shadow: {}, dict: {} });
+    progress.shadow ||= {};
+    progress.shadowDetails ||= {};
+    if (progress.shadow[index] == null || score > progress.shadow[index]) progress.shadow[index] = score;
+    progress.shadowDetails[index] = {
+      score, metrics, heard, events, updatedAt: Date.now(),
+    };
+    store.set(key, progress);
+    if (state.id === videoId && state.language === language) {
+      state.progress = progress;
+      refreshBadges();
+      if (state.cur === index && state.mode === 'shadow') renderShadowAssessment(progress.shadowDetails[index]);
+    }
+  }
+
   async function startRec() {
     if (!state.lines.length) return;
     const msg = $('#s-msg');
@@ -1183,19 +1258,28 @@
     catch (e) { msg.textContent = 'Chưa có quyền dùng micro. Hãy cho phép micro cho trang này.'; return; }
 
     let mr = null; const chunks = [];
+    let recordingPromise = null;
     try {
       mr = new MediaRecorder(stream);
+      recordingPromise = new Promise(resolve => {
+        mr.onstop = () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = chunks.length ? new Blob(chunks, { type: mr.mimeType }) : null;
+          if (blob) {
+            const audio = new Audio(URL.createObjectURL(blob));
+            state.mine = audio; $('#s-mine').disabled = false;
+          }
+          resolve(blob);
+        };
+      });
       mr.ondataavailable = e => e.data.size && chunks.push(e.data);
-      mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        if (chunks.length) {
-          const audio = new Audio(URL.createObjectURL(new Blob(chunks, { type: mr.mimeType })));
-          state.mine = audio; $('#s-mine').disabled = false;
-        }
-      };
       mr.start();
-    } catch (e) { stream.getTracks().forEach(t => t.stop()); mr = null; }
+    } catch (e) { stream.getTracks().forEach(t => t.stop()); mr = null; recordingPromise = null; }
 
+    const assessmentContext = {
+      videoId: state.id, language: state.language, index: state.cur,
+      line: state.lines[state.cur], progressKey: progressKey(state.id),
+    };
     const r = new SR();
     r.lang = speechLocale(state.language);
     r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
@@ -1212,18 +1296,41 @@
         msg.textContent = 'Lỗi nhận giọng nói: ' + e.error;
       }
     };
-    r.onend = () => {
+    r.onend = async () => {
       if (mr && mr.state !== 'inactive') mr.stop();
       state.rec = null;
       $('#s-rec').classList.remove('on'); $('#s-rec').textContent = '● Nói theo';
       if (!heard) { if (/^Đang nghe/.test(msg.textContent) || !msg.textContent) msg.textContent = 'Không nghe thấy gì. Thử nói gần micro hơn.'; return; }
-      const res = Score.align(state.lines[state.cur].text, heard, state.language);
-      $('#s-out').hidden = false;
-      $('#s-num').textContent = res.score; $('#s-lab').textContent = label(res.score);
-      $('#s-heard').textContent = 'Máy nghe được: “' + heard + '”';
-      renderDiff($('#s-diff'), res.events);
+      const res = Score.align(assessmentContext.line.text, heard, assessmentContext.language);
+      const initialAssessment = { score: res.score, metrics: null, heard, events: res.events };
+      if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index) {
+        renderShadowAssessment(initialAssessment);
+      }
       msg.textContent = 'Xanh là đúng, vàng là gần đúng, đỏ viền đứt là bị sót.';
-      saveScore('shadow', res.score);
+      saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
+        assessmentContext.index, res.score, null, heard, res.events);
+      if (recordingPromise) {
+        try {
+          const blob = await recordingPromise;
+          if (!blob) throw new Error('Không có bản ghi micro.');
+          const duration = assessmentContext.line.end - assessmentContext.line.start;
+          const metrics = await measureRecording(blob, duration);
+          if (!metrics) throw new Error('Âm thanh thu được quá ngắn hoặc quá nhỏ.');
+          const fullAssessment = { score: res.score, metrics, heard, events: res.events };
+          saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
+            assessmentContext.index, res.score, metrics, heard, res.events);
+          if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index &&
+              state.mode === 'shadow') renderShadowAssessment(fullAssessment);
+        } catch (error) {
+          if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index) {
+            $('#s-assessment-note').textContent =
+              'Chỉ có điểm phát âm; không phân tích được bản ghi: ' + error.message;
+          }
+        }
+      } else {
+        $('#s-assessment-note').textContent =
+          'Chỉ có điểm phát âm; trình duyệt chưa hỗ trợ ghi âm để ước tính các tiêu chí khác.';
+      }
     };
     state.rec = r;
     $('#s-rec').classList.add('on'); $('#s-rec').textContent = '■ Dừng';
