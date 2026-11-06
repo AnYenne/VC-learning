@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luyện tập · ShadowDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#eef1f4; --panel:#fff; --line:#d9e0e6; --ink:#15202b; --mute:#5d6d7b; --accent:#0f6e6e; --accent-ink:#fff; --ok:#12804a; --okbg:#d7f3e3; --bad:#b42323; --badbg:#fde0e0; --font:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace; }
+  @media(prefers-color-scheme:dark){:root{--bg:#182129;--panel:#202c36;--line:#34424e;--ink:#e7eef4;--mute:#a0afbd;--accent:#4fc3bd;--accent-ink:#052321;--ok:#62d394;--okbg:#12301f;--bad:#ff8585;--badbg:#3b1818;color-scheme:dark}}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--font)} button,input,select,textarea{font:inherit;color:inherit} button{cursor:pointer} :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px max(16px,calc((100% - 1120px)/2));border-bottom:1px solid var(--line);background:var(--panel)} .brand{margin-right:auto;font-size:18px;font-weight:700;text-decoration:none}.brand span{background:#ffe27a;color:#3a2e00;padding:0 6px;margin-left:2px;border-radius:3px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-weight:600;text-decoration:none}.btn:hover{border-color:var(--accent)}.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}.btn:disabled{opacity:.45;cursor:not-allowed}
+  main{width:min(1120px,100%);margin:0 auto;padding:24px 16px 48px} h1{margin:0;font-size:clamp(24px,4vw,32px);line-height:1.25}.intro{margin:8px 0 20px;color:var(--mute)}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}.tabs button{padding:9px 14px;border:0;border-bottom:3px solid transparent;background:none;color:var(--mute);font-weight:600;white-space:nowrap}.tabs button[aria-selected=true]{color:var(--ink);border-color:var(--accent)}
+  .panel{display:grid;gap:14px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.panel[hidden]{display:none}.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.row .spacer{flex:1}
+  label{display:grid;gap:4px;color:var(--mute);font-size:13px} select,input[type=text],textarea{min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)} select{max-width:100%} input[type=checkbox]{accent-color:var(--accent)}
+  .field{flex:1 1 220px}.field select,.field input,.field textarea{width:100%}.hint{margin:0;color:var(--mute);font-size:13px}.notice{padding:10px 12px;border-radius:8px;background:var(--bg);color:var(--mute);font-size:13px}.notice.error{background:var(--badbg);color:var(--bad)}.notice[hidden]{display:none}
+  .video{position:relative;max-width:720px;aspect-ratio:16/9;border-radius:10px;background:#000;overflow:hidden}.video iframe{position:absolute;inset:0;width:100%;height:100%}.video-empty{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;color:#c3ccd2}.video-empty[hidden]{display:none}
+  .turn{padding:12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:var(--bg)}.turn .label{margin:0 0 4px;color:var(--mute);font-size:12px;font-weight:600}.turn p:last-child{margin:0;font-size:18px;font-weight:600;overflow-wrap:anywhere}.turn[hidden]{display:none}
+  .turns{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.score{font:700 22px var(--mono)}.diff{font-size:16px;line-height:2}.diff .ok{padding:2px 4px;border-radius:4px;background:var(--okbg);color:var(--ok)}.diff .miss{padding:2px 4px;border:1px dashed var(--bad);border-radius:4px;color:var(--bad)}.diff .other{color:var(--mute);text-decoration:line-through}
+  .hide-target #cueText,.hide-target #responseText{visibility:hidden}
+  .notice.success{background:var(--okbg);color:var(--ok)}
+  .check{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:13px}.split{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr);gap:16px}.box{display:grid;align-content:start;gap:12px;padding:14px;border:1px solid var(--line);border-radius:10px}.box h2{margin:0;font-size:18px}.box h3{margin:4px 0 0;font-size:14px}.sentence{padding:12px;border-radius:8px;background:var(--bg);font-size:18px;font-weight:600;overflow-wrap:anywhere}.formula{font-family:var(--mono);font-size:14px}.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{padding:4px 9px;border:1px solid var(--line);border-radius:20px;background:var(--bg);font-size:13px}.cards{display:grid;gap:10px}.card{padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--bg)}.card h3{margin:0 0 6px}.card p{margin:4px 0}.card-actions{display:flex;gap:8px;margin-top:8px}.empty{padding:18px;border:1px dashed var(--line);border-radius:9px;color:var(--mute);text-align:center}.empty[hidden]{display:none}
+  @media(max-width:760px){.split{grid-template-columns:1fr}.top{padding:10px 12px}main{padding:20px 12px 36px}}
+</style>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">Shadow<span>Desk</span></a>
+  <a class="btn" href="index.html?mode=review">Ôn tập quiz</a>
+  <a class="btn" href="history.html">Video đã học</a>
+  <a class="btn primary" href="index.html">+ Học video mới</a>
+</header>
+<main>
+  <h1>Phòng luyện tập</h1>
+  <p class="intro">Luyện đối thoại theo vai hoặc biến câu đã học thành cách diễn đạt mới. Nội dung được lưu trên trình duyệt này.</p>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-panel="roleplay" aria-selected="true">Nhập vai hội thoại</button>
+    <button role="tab" data-panel="creative" aria-selected="false">Mở rộng câu &amp; từ vựng</button>
+  </nav>
+
+  <section class="panel" id="panel-roleplay">
+    <div class="row">
+      <label class="field">Video đã học
+        <select id="videoSelect"></select>
+      </label>
+      <label class="field">Vai của bạn
+        <select id="roleSelect">
+          <option value="A">Vai A — các câu 1, 3, 5…</option>
+          <option value="B">Vai B — các câu 2, 4, 6…</option>
+          <option value="both">Cả hai vai — nhại từ đầu đến cuối</option>
+        </select>
+      </label>
+      <label class="field">Cách trả lời
+        <select id="replyMode">
+          <option value="script">Nói theo thoại gốc và chấm điểm</option>
+          <option value="free">Tự ứng biến, không chấm khớp câu</option>
+        </select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="hideTranscript"> Ẩn lời thoại cần nói</label>
+    <p class="hint">Transcript không có nhãn người nói nên A/B được chia luân phiên theo từng câu; có thể không trùng người nói thật trong video.</p>
+    <div class="video">
+      <div id="player"></div>
+      <div id="videoEmpty" class="video-empty">Chọn video đã học để bắt đầu.</div>
+    </div>
+    <div class="turns">
+      <div class="turn"><p class="label" id="cueLabel">Lời thoại</p><p id="cueText">Chưa chọn video.</p></div>
+      <div class="turn" id="responseTurn" hidden><p class="label" id="responseLabel">Lượt của bạn</p><p id="responseText"></p></div>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="startSession">▶ Bắt đầu từ đầu video</button>
+      <button class="btn" id="stopSession" disabled>■ Dừng lượt</button>
+      <button class="btn" id="repeatTurn" disabled>↻ Nghe lại câu đang tới</button>
+      <button class="btn rec" id="speakTurn" disabled>● Trả lời</button>
+      <button class="btn" id="skipTurn" disabled>Bỏ qua câu</button>
+      <span class="spacer"></span><span class="hint" id="sessionProgress"></span>
+    </div>
+    <div class="turn" id="feedbackTurn" hidden>
+      <p class="label">Kết quả lượt vừa nói</p>
+      <p class="score" id="turnScore"></p>
+      <p id="turnHeard"></p>
+      <div class="diff" id="turnDiff"></div>
+    </div>
+    <p class="notice" id="roleplayStatus" role="status">Chọn A/B để nghe các lượt của vai còn lại và tự nói lượt của mình. Chọn “Cả hai vai” để nhại mọi câu lần lượt.</p>
+  </section>
+
+  <section class="panel" id="panel-creative" hidden>
+    <div class="row">
+      <label class="field">Video nguồn
+        <select id="creativeVideo"></select>
+      </label>
+      <label class="field">Câu đã học
+        <select id="creativeLine"></select>
+      </label>
+    </div>
+    <div class="split">
+      <article class="box">
+        <h2>Cấu trúc câu</h2>
+        <div class="sentence" id="sourceSentence">Chọn câu trong transcript đã lưu.</div>
+        <div><p class="hint">Mẫu/công thức nhận diện</p><p class="formula" id="sentenceFormula">—</p></div>
+        <p class="hint" id="sentenceParts"></p>
+        <h3>Khung ứng dụng của bạn</h3>
+        <label class="field">Chủ đề
+          <input type="text" id="topicInput" placeholder="Ví dụ: món ăn, sở thích, du lịch">
+        </label>
+        <label class="field">Câu có chỗ thay từ
+          <input type="text" id="frameInput" placeholder="Ví dụ: I like eating {food}.">
+        </label>
+        <label class="field">Khung hoạt động thay thế
+          <input type="text" id="activityFrameInput" placeholder="Ví dụ: I like {activity}.">
+        </label>
+        <label class="field">Danh từ/cụm từ cùng chủ đề — mỗi dòng một mục
+          <textarea id="foodInput" rows="3" placeholder="pizza&#10;spaghetti&#10;sushi"></textarea>
+        </label>
+        <label class="field">Động từ/cụm hành động — mỗi dòng một mục
+          <textarea id="actionInput" rows="3" placeholder="eating&#10;ordering&#10;cooking"></textarea>
+        </label>
+        <label class="field">Hoạt động khác để đổi ý — mỗi dòng một mục
+          <textarea id="activityInput" rows="3" placeholder="listening to music&#10;playing on a swing"></textarea>
+        </label>
+        <div class="row">
+          <button class="btn" id="suggestWords">Gợi ý từ theo chủ đề</button>
+          <button class="btn primary" id="saveCard">Lưu bộ câu này</button>
+        </div>
+        <p class="notice" id="creativeStatus" role="status" hidden></p>
+        <p class="hint">Gợi ý tự động hiện có là ví dụ tiếng Anh theo chủ đề phổ biến; hãy sửa lại cho đúng ngôn ngữ và ngữ cảnh. Các câu lưu là bộ thẻ cá nhân, không thay transcript.</p>
+      </article>
+      <article class="box">
+        <h2>Câu biến thể &amp; bộ đã lưu</h2>
+        <div id="previewSentences" class="chips"></div>
+        <h3>Thư viện câu sáng tạo</h3>
+        <div id="savedCards" class="cards"></div>
+        <div class="empty" id="cardsEmpty" hidden>Chưa lưu bộ câu nào. Chọn một câu đã học rồi tạo bộ gợi ý cho câu đó.</div>
+      </article>
+    </div>
+  </section>
+</main>
+<script src="score.js"></script>
+<script src="analyze.js"></script>
+<script>
+(() => {
+  const $ = selector => document.querySelector(selector);
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const validEntry = entry => entry && /^[\w-]{11}$/.test(entry.id || '') &&
+    typeof entry.language === 'string' && Array.isArray(entry.lines);
+  const readArray = key => {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || '[]');
+      return Array.isArray(value) ? value : [];
+    } catch (error) {
+      setStatus('Không đọc được dữ liệu đã lưu: ' + error.message, true);
+      return [];
+    }
+  };
+  const linesFor = entry => (entry?.lines || []).filter(line => line && typeof line.text === 'string');
+  const entries = readArray('ss:history').filter(validEntry);
+  let cards = readArray('ss:creativeCards').filter(card => card && typeof card.id === 'string');
+  let selectedEntry = null;
+  let selectedCreativeEntry = null;
+  let player = null;
+  let playerReady = false;
+  let playerApiReady = false;
+  let session = null;
+  let recognition = null;
+  let turnNumber = 0;
+  let turnResults = { correct: 0, total: 0 };
+
+  function setStatus(message, error) {
+    $('#roleplayStatus').textContent = message;
+    $('#roleplayStatus').classList.toggle('error', !!error);
+    $('#roleplayStatus').hidden = !message;
+  }
+  function setCreativeStatus(message, error) {
+    $('#creativeStatus').textContent = message;
+    $('#creativeStatus').classList.toggle('error', !!error);
+    $('#creativeStatus').classList.toggle('success', !error);
+    $('#creativeStatus').hidden = !message;
+  }
+  function speechLocale(language) {
+    if (/^zh(?:$|-Hans(?:-|$)|-CN$|-SG$)/i.test(language)) return 'zh-CN';
+    if (/^zh(?:-Hant(?:-|$)|-TW$|-HK$|-MO$)/i.test(language)) return 'zh-TW';
+    return language === 'und' ? navigator.language : language;
+  }
+  function syncRoleControls() {
+    const both = $('#roleSelect').value === 'both';
+    if (both && $('#replyMode').value === 'free') $('#replyMode').value = 'script';
+    $('#replyMode').disabled = both;
+  }
+  function playerVolume() {
+    try {
+        const value = JSON.parse(localStorage.getItem('ss:volume') || '75');
+      return Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 75;
+    } catch (error) {
+      return 75;
+    }
+  }
+  function showVideo(entry) {
+    if (!entry) {
+      $('#videoEmpty').hidden = false;
+      $('#videoEmpty').textContent = 'Chọn video đã học để bắt đầu.';
+      $('#cueText').textContent = 'Chưa chọn video.';
+      $('#startSession').disabled = true;
+      return;
+    }
+    $('#videoEmpty').hidden = true;
+    $('#startSession').disabled = !playerReady;
+    if (playerReady) player.cueVideoById(entry.id);
+    else if (playerApiReady && !player) makePlayer(entry.id);
+  }
+  function makePlayer(videoId) {
+    player = new YT.Player('player', {
+      videoId,
+      playerVars: {playsinline:1,rel:0,modestbranding:1,autoplay:0,origin:location.origin},
+      events: {
+        onReady: () => {
+          playerReady = true;
+          $('#videoEmpty').hidden = true;
+          player.setVolume(playerVolume());
+          if (selectedEntry) player.cueVideoById(selectedEntry.id);
+          $('#startSession').disabled = !selectedEntry;
+          if (session?.waitingVideo) playOpponentTurn(session.index);
+        },
+        onError: event => setStatus('YouTube không phát được video (mã lỗi ' + event.data + ').', true),
+      },
+    });
+  }
+  window.onYouTubeIframeAPIReady = () => {
+    playerApiReady = true;
+    if (selectedEntry && !player) makePlayer(selectedEntry.id);
+  };
+  const apiScript = document.createElement('script');
+  apiScript.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(apiScript);
+
+  function populateVideos(select, preserveId) {
+    select.innerHTML = '';
+    if (!entries.length) {
+      select.add(new Option('Chưa có video đã học', ''));
+      return;
+    }
+    for (const entry of entries) {
+      select.add(new Option((entry.title || entry.id) + ' · ' + entry.language, entry.id + '|' + entry.language));
+    }
+    if (preserveId) {
+      const option = [...select.options].find(item => item.value === preserveId);
+      if (option) select.value = preserveId;
+    }
+  }
+  function entryKey(entry) { return entry ? entry.id + '|' + entry.language : ''; }
+  function syncRoleplayEntry() {
+    selectedEntry = entries.find(entry => entryKey(entry) === $('#videoSelect').value) || null;
+    stopSession();
+    showVideo(selectedEntry);
+    if (selectedEntry && !player) {
+      $('#videoEmpty').textContent = 'Đang tải trình phát YouTube…';
+      $('#videoEmpty').hidden = false;
+    }
+    if (!selectedEntry) setStatus('Chưa có video trong lịch sử. Hãy tải video ở trang học trước.');
+  }
+  function setCurrentTurn(index, roleLabel, line) {
+    $('#cueLabel').textContent = roleLabel;
+    $('#cueText').textContent = line.text;
+    $('#sessionProgress').textContent = 'Câu ' + (index + 1) + '/' + session.lines.length +
+      ' · ' + turnResults.correct + '/' + turnResults.total + ' lượt khớp';
+    $('#responseTurn').hidden = true;
+    $('#feedbackTurn').hidden = true;
+    $('#repeatTurn').disabled = false;
+    $('#speakTurn').disabled = session.phase === 'other';
+    $('#skipTurn').disabled = session.phase === 'other' || session.phase === 'echo-source';
+  }
+  function stopSession(announce) {
+    if (recognition) {
+      try { recognition.abort(); } catch (error) {
+        if (error.name !== 'InvalidStateError') setStatus('Không thể dừng nhận giọng nói: ' + error.message, true);
+      }
+      recognition = null;
+    }
+    session = null;
+    if (playerReady) player.pauseVideo();
+    $('#startSession').disabled = !selectedEntry || !playerReady;
+    $('#stopSession').disabled = true;
+    $('#repeatTurn').disabled = true;
+    $('#speakTurn').disabled = true;
+    $('#skipTurn').disabled = true;
+    if (announce) setStatus(announce);
+  }
+  function beginTurn(index) {
+    if (!session || index >= session.lines.length) {
+      const summary = turnResults.total
+        ? 'Hoàn thành hội thoại: ' + turnResults.correct + '/' + turnResults.total + ' lượt đạt từ 75 điểm.'
+        : 'Đã đi hết transcript.';
+      stopSession(summary);
+      $('#cueLabel').textContent = 'Hoàn thành';
+      $('#cueText').textContent = summary;
+      $('#sessionProgress').textContent = '';
+      return;
+    }
+    const line = session.lines[index];
+    const userTurn = session.role === 'both' || (index % 2 === (session.role === 'A' ? 0 : 1));
+    session.index = index;
+    session.phase = userTurn ? (session.role === 'both' ? 'echo-source' : 'user') : 'other';
+    setCurrentTurn(index, userTurn ? (session.role === 'both' ? 'Nghe câu mẫu, rồi nhại lại' : 'Lượt của bạn · Vai ' + session.role) : 'Đang nghe vai ' + (index % 2 ? 'B' : 'A'), line);
+    if (session.phase === 'user') {
+      player.pauseVideo();
+      player.seekTo(line.start, true);
+      $('#responseLabel').textContent = 'Ngữ cảnh trước đó';
+      $('#responseText').textContent = index ? session.lines[index - 1].text : 'Lượt mở đầu trong transcript.';
+      $('#responseTurn').hidden = false;
+      setStatus('Đang tới lượt bạn. Hãy trả lời; hội thoại sẽ tự tiếp tục sau khi nhận giọng nói.');
+      startRecognition();
+    } else playOpponentTurn(index);
+  }
+  function playOpponentTurn(index) {
+    if (!session || !playerReady) {
+      if (session) session.waitingVideo = true;
+      return;
+    }
+    const line = session.lines[index];
+    if (!line) return beginTurn(index + 1);
+    session.waitingVideo = false;
+    session.phase = session.role === 'both' ? 'echo-source' : 'other';
+    player.seekTo(Math.max(0, line.start), true);
+    player.playVideo();
+    setStatus('Đang phát lượt thoại ' + (index % 2 ? 'B' : 'A') + '…');
+  }
+  function repeatCurrent() {
+    if (!session || !playerReady) return;
+    const line = session.lines[session.index];
+    if (session.phase === 'echo-source' || session.phase === 'echo-response' || session.phase === 'other')
+      playOpponentTurn(session.index);
+    else {
+      player.pauseVideo();
+      player.seekTo(line.start, true);
+      setStatus('Đây là lượt của bạn; transcript được giữ theo lựa chọn ẩn/hiện.');
+    }
+  }
+  function startRecognition() {
+    if (!session || recognition) return;
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      $('#speakTurn').disabled = false;
+      $('#skipTurn').disabled = false;
+      setStatus('Trình duyệt không tự nhận giọng nói. Bấm “Trả lời” để thử lại trên Chrome/Edge.', true);
+      return;
+    }
+    const currentSession = session;
+    const line = currentSession.lines[currentSession.index];
+    const recognizer = new Recognition();
+    recognizer.lang = speechLocale(selectedEntry.language);
+    recognizer.interimResults = true;
+    recognizer.continuous = false;
+    recognizer.maxAlternatives = 1;
+    let heard = '';
+    recognizer.onresult = event => {
+      heard = Array.from(event.results).map(result => result[0].transcript).join(' ').trim();
+      setStatus('Đang nghe: ' + heard);
+    };
+    recognizer.onerror = event => {
+      if (event.error !== 'aborted' && event.error !== 'no-speech')
+        setStatus('Lỗi nhận giọng nói: ' + event.error, true);
+    };
+    recognizer.onend = () => {
+      if (recognition === recognizer) recognition = null;
+      if (session !== currentSession) return;
+      $('#speakTurn').classList.remove('on');
+      $('#speakTurn').textContent = '● Trả lời';
+      if (!heard) {
+        $('#speakTurn').disabled = false;
+        $('#skipTurn').disabled = false;
+        if (currentSession.phase === 'user' || currentSession.phase === 'echo-response') {
+          setStatus('Chưa nhận được câu nói. Bấm “Trả lời” để thử lại hoặc bỏ qua lượt.', true);
+        }
+        return;
+      }
+      const shouldScore = $('#replyMode').value === 'script' || currentSession.role === 'both';
+      if (shouldScore) {
+        const result = Score.align(line.text, heard, selectedEntry.language);
+        turnResults.total++;
+        if (result.score >= 75) turnResults.correct++;
+        $('#turnScore').textContent = result.score + '/100';
+        $('#turnHeard').textContent = 'Bạn nói: “' + heard + '”';
+        $('#turnDiff').innerHTML = result.events.map(item =>
+          item.t === 'ok' || item.t === 'close'
+            ? '<span class="ok">' + esc(item.ref) + '</span>'
+            : item.t === 'miss'
+              ? '<span class="miss">' + esc(item.ref) + '</span>'
+              : '<span class="other">' + esc(item.hyp) + '</span>').join(' ');
+        $('#feedbackTurn').hidden = false;
+      } else {
+        $('#turnScore').textContent = 'Ứng biến';
+        $('#turnHeard').textContent = 'Bạn nói: “' + heard + '”';
+        $('#turnDiff').textContent = 'Câu trong transcript: ' + line.text;
+        $('#feedbackTurn').hidden = false;
+      }
+      currentSession.phase = 'answered';
+      $('#speakTurn').disabled = true;
+      $('#skipTurn').disabled = true;
+      setStatus('Đã ghi nhận câu trả lời. Đang tiếp tục hội thoại…');
+      window.setTimeout(() => {
+        if (session === currentSession) beginTurn(currentSession.index + 1);
+      }, 700);
+    };
+    recognition = recognizer;
+    $('#speakTurn').disabled = true;
+    $('#speakTurn').classList.add('on');
+    $('#speakTurn').textContent = '■ Đang nghe';
+    try { recognizer.start(); }
+    catch (error) {
+      recognition = null;
+      $('#speakTurn').disabled = false;
+      $('#skipTurn').disabled = false;
+      $('#speakTurn').classList.remove('on');
+      $('#speakTurn').textContent = '● Trả lời';
+      setStatus('Không thể bắt đầu nhận giọng nói: ' + error.message, true);
+    }
+  }
+  $('#startSession').addEventListener('click', () => {
+    if (!selectedEntry || !playerReady || !linesFor(selectedEntry).length) {
+      setStatus('Video cần có transcript đã lưu và player sẵn sàng.', true);
+      return;
+    }
+    turnResults = {correct:0,total:0};
+    session = {lines:linesFor(selectedEntry),role:$('#roleSelect').value,index:0,phase:'starting',waitingVideo:false};
+    $('#startSession').disabled = true;
+    $('#stopSession').disabled = false;
+    setStatus('Bắt đầu từ câu đầu transcript.');
+    beginTurn(0);
+  });
+  $('#stopSession').addEventListener('click', () => stopSession('Đã dừng lượt nhập vai.'));
+  $('#speakTurn').addEventListener('click', () => {
+    if (!session) return;
+    if (session.phase === 'other' || session.phase === 'echo-source') {
+      setStatus('Đợi câu thoại trong video phát xong rồi mới tới lượt bạn.');
+      return;
+    }
+    startRecognition();
+  });
+  $('#skipTurn').addEventListener('click', () => {
+    if (!session) return;
+    if (recognition) {
+      const activeRecognition = recognition;
+      recognition = null;
+      try {
+        activeRecognition.onend = null;
+        activeRecognition.onresult = null;
+        activeRecognition.onerror = null;
+        activeRecognition.abort();
+      } catch (error) {
+        if (error.name !== 'InvalidStateError') setStatus('Không thể dừng nhận giọng nói: ' + error.message, true);
+      }
+    }
+    beginTurn(session.index + 1);
+  });
+  $('#repeatTurn').addEventListener('click', repeatCurrent);
+  $('#videoSelect').addEventListener('change', syncRoleplayEntry);
+  $('#roleSelect').addEventListener('change', () => {
+    syncRoleControls();
+    if (session) stopSession('Vai đã đổi. Bấm bắt đầu để chạy hội thoại lại.');
+  });
+  $('#replyMode').addEventListener('change', () => {
+    if (session) stopSession('Cách trả lời đã đổi. Bấm bắt đầu để chạy hội thoại lại.');
+  });
+  $('#hideTranscript').addEventListener('change', event => {
+    document.body.classList.toggle('hide-target', event.target.checked);
+  });
+  setInterval(() => {
+    if (!session || !playerReady || session.phase !== 'other' && session.phase !== 'echo-source') return;
+    let currentTime;
+    try { currentTime = player.getCurrentTime(); } catch (error) { return; }
+    const line = session.lines[session.index];
+    if (currentTime < line.end - 0.02) return;
+    player.pauseVideo();
+    if (session.phase === 'echo-source') {
+      session.phase = 'echo-response';
+      $('#cueLabel').textContent = 'Lượt mẫu trong video';
+      $('#cueText').textContent = line.text;
+      $('#responseLabel').textContent = 'Nhại câu vừa nghe';
+      $('#responseText').textContent = $('#hideTranscript').checked ? '••••••••' : line.text;
+      $('#responseTurn').hidden = false;
+      $('#speakTurn').disabled = false;
+      $('#skipTurn').disabled = false;
+      startRecognition();
+    } else beginTurn(session.index + 1);
+  }, 100);
+
+  function parseList(text) {
+    return [...new Set(text.split(/[\n,;]+/).map(item => item.trim()).filter(Boolean))];
+  }
+  function setList(textarea, items) { textarea.value = items.join('\n'); }
+  function creativeSuggestion(sentence, language) {
+    const base = (language || '').split('-')[0];
+    const english = base === 'en';
+    let frame = sentence;
+    let activityFrame = '';
+    let food = [];
+    let actions = [];
+    let activities = [];
+    let topic = '';
+    if (english) {
+      const foodMatch = sentence.match(/^(.+?\b(?:like|likes|love|loves|enjoy|enjoys)\s+)(?:to\s+)?(eat(?:ing)?|order(?:ing)?|cook(?:ing)?|shar(?:e|ing))\s+(.+?)([.!?]*)$/i);
+      if (foodMatch) {
+        topic = 'Món ăn';
+        const [, prefix, , word, punctuation] = foodMatch;
+        food = /chicken/i.test(word)
+          ? ['pizza', 'spaghetti', 'sushi', 'grilled fish']
+          : /pizza/i.test(word) ? ['fried chicken', 'spaghetti', 'sushi', 'noodles']
+            : /spaghetti|pasta/i.test(word) ? ['pizza', 'fried chicken', 'sushi', 'noodles']
+              : ['pizza', 'fried chicken', 'spaghetti', 'grilled fish'];
+        actions = ['eating', 'ordering', 'cooking', 'sharing'];
+        frame = prefix + '{action} {food}' + punctuation;
+        activityFrame = prefix + '{activity}' + punctuation;
+      }
+      const like = sentence.match(/^(.+?\b(?:like|likes|love|loves|enjoy|enjoys)\s+)(.+?)([.!?]*)$/i);
+      if (like && !activityFrame) {
+        const before = like[1], after = like[3];
+        activities = ['eating fried chicken', 'listening to music', 'playing on a swing', 'watching a movie'];
+        activityFrame = before + '{activity}' + after;
+      }
+    }
+    return {frame,activityFrame,food,actions,activities,topic,language};
+  }
+  function populateCreativeLines() {
+    selectedCreativeEntry = entries.find(entry => entryKey(entry) === $('#creativeVideo').value) || null;
+    const lines = linesFor(selectedCreativeEntry);
+    $('#creativeLine').replaceChildren();
+    for (let index = 0; index < lines.length; index++)
+      $('#creativeLine').add(new Option((index + 1) + '. ' + lines[index].text, String(index)));
+    if (!lines.length) {
+      $('#creativeLine').add(new Option('Transcript chưa có câu', ''));
+      $('#sourceSentence').textContent = 'Chọn câu trong transcript đã lưu.';
+      $('#sentenceFormula').textContent = '—';
+      $('#sentenceParts').textContent = '';
+      return;
+    }
+    loadCreativeSentence();
+  }
+  function loadCreativeSentence() {
+    selectedCreativeEntry = entries.find(entry => entryKey(entry) === $('#creativeVideo').value) || null;
+    const line = linesFor(selectedCreativeEntry)[Number($('#creativeLine').value)];
+    if (!line) return;
+    const language = selectedCreativeEntry.language || 'und';
+    const analysis = SentenceAnalysis.analyze(line.text, language);
+    const suggestion = creativeSuggestion(line.text, language);
+    $('#sourceSentence').textContent = line.text;
+    $('#sentenceFormula').textContent = analysis.formula || analysis.grammar?.[0]?.formula ||
+      'S + V + bổ ngữ (mẫu tham khảo; có thể sửa theo ngữ cảnh)';
+    $('#sentenceParts').textContent = analysis.structure.length
+      ? analysis.structure.map(part => part.part + ' — ' + part.role).join(' · ')
+      : analysis.grammar?.[0]?.form || analysis.context;
+    $('#topicInput').value = suggestion.topic;
+    $('#frameInput').value = suggestion.frame;
+    $('#activityFrameInput').value = suggestion.activityFrame;
+    setList($('#foodInput'), suggestion.food);
+    setList($('#actionInput'), suggestion.actions);
+    setList($('#activityInput'), suggestion.activities);
+    renderPreview();
+  }
+  function currentDraft() {
+    const lineIndex = Number($('#creativeLine').value);
+    const line = linesFor(selectedCreativeEntry)[lineIndex];
+    return {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+      sourceId: selectedCreativeEntry?.id || '',
+      sourceTitle: selectedCreativeEntry?.title || '',
+      language: selectedCreativeEntry?.language || 'und',
+      sourceSentence: line?.text || '',
+      topic: $('#topicInput').value.trim(),
+      frame: $('#frameInput').value.trim(),
+      activityFrame: $('#activityFrameInput').value.trim(),
+      foods: parseList($('#foodInput').value),
+      actions: parseList($('#actionInput').value),
+      activities: parseList($('#activityInput').value),
+      createdAt: Date.now(),
+    };
+  }
+  function variantsFor(card) {
+    const variants = [];
+    if (card.frame.includes('{food}')) {
+      const actions = card.actions.length ? card.actions : [''];
+      for (const food of card.foods) for (const action of actions.slice(0,3)) {
+        variants.push(card.frame.replaceAll('{food}', food).replaceAll('{action}', action).replaceAll(/\s+/g,' ').trim());
+      }
+    } else variants.push(card.frame);
+    if (card.activityFrame.includes('{activity}')) {
+      for (const activity of card.activities)
+        variants.push(card.activityFrame.replaceAll('{activity}', activity));
+    }
+    return [...new Set(variants)].filter(Boolean).slice(0,12);
+  }
+  function renderPreview() {
+    const card = currentDraft();
+    const variants = variantsFor(card);
+    $('#previewSentences').innerHTML = variants.length
+      ? variants.map(sentence => '<span class="chip">' + esc(sentence) + '</span>').join('')
+      : '<span class="hint">Thêm từ hoặc cụm từ vào các ô để xem câu biến thể.</span>';
+  }
+  function renderCards() {
+    $('#savedCards').innerHTML = cards.map(card =>
+      '<article class="card"><h3>' + esc(card.topic || 'Bộ câu') + '</h3>' +
+      '<p><b>Câu gốc:</b> ' + esc(card.sourceSentence) + '</p>' +
+      '<p><b>Cấu trúc:</b> ' + esc(card.frame) + (card.activityFrame ? '<br><b>Hoạt động:</b> ' + esc(card.activityFrame) : '') + '</p>' +
+      '<div class="chips">' + variantsFor(card).map(sentence => '<span class="chip">' + esc(sentence) + '</span>').join('') + '</div>' +
+      '<div class="card-actions"><button class="btn" type="button" data-load-card="' + esc(card.id) + '">Chỉnh sửa</button>' +
+      '<button class="btn" type="button" data-delete-card="' + esc(card.id) + '">Xóa</button></div></article>'
+    ).join('');
+    $('#cardsEmpty').hidden = cards.length > 0;
+  }
+  function saveCards() {
+    try { localStorage.setItem('ss:creativeCards', JSON.stringify(cards)); }
+    catch (error) { throw new Error('Không lưu được bộ câu: ' + error.message); }
+  }
+  $('#suggestWords').addEventListener('click', () => {
+    if (!selectedCreativeEntry) return;
+    const line = linesFor(selectedCreativeEntry)[Number($('#creativeLine').value)];
+    if (!line) return;
+    const suggestion = creativeSuggestion(line.text, selectedCreativeEntry.language);
+    $('#topicInput').value = suggestion.topic || $('#topicInput').value || 'Chủ đề của câu';
+    $('#frameInput').value = suggestion.frame;
+    $('#activityFrameInput').value = suggestion.activityFrame;
+    setList($('#foodInput'), suggestion.food);
+    setList($('#actionInput'), suggestion.actions);
+    setList($('#activityInput'), suggestion.activities);
+    renderPreview();
+  });
+  $('#saveCard').addEventListener('click', () => {
+    if (!selectedCreativeEntry) return setCreativeStatus('Hãy chọn video và câu nguồn trước.', true);
+    const card = currentDraft();
+    if (!card.frame) return setCreativeStatus('Hãy nhập cấu trúc câu muốn lưu.', true);
+    const previous = cards;
+    cards = [card, ...cards].slice(0,100);
+    try { saveCards(); renderCards(); setCreativeStatus('Đã lưu bộ câu vào thư viện cá nhân.'); }
+    catch (error) { cards = previous; setCreativeStatus(error.message, true); }
+  });
+  $('#savedCards').addEventListener('click', event => {
+    const loadId = event.target.closest('[data-load-card]')?.dataset.loadCard;
+    const deleteId = event.target.closest('[data-delete-card]')?.dataset.deleteCard;
+    if (loadId) {
+      const card = cards.find(item => item.id === loadId);
+      if (!card) return;
+      $('#topicInput').value = card.topic;
+      $('#frameInput').value = card.frame;
+      $('#activityFrameInput').value = card.activityFrame || '';
+      setList($('#foodInput'), card.foods);
+      setList($('#actionInput'), card.actions);
+      setList($('#activityInput'), card.activities);
+      renderPreview();
+    } else if (deleteId) {
+      const previous = cards;
+      cards = cards.filter(item => item.id !== deleteId);
+      try { saveCards(); renderCards(); }
+      catch (error) { cards = previous; setCreativeStatus(error.message, true); }
+    }
+  });
+  for (const selector of ['#topicInput','#frameInput','#activityFrameInput','#foodInput','#actionInput','#activityInput'])
+    $(selector).addEventListener('input', renderPreview);
+  $('#creativeVideo').addEventListener('change', populateCreativeLines);
+  $('#creativeLine').addEventListener('change', loadCreativeSentence);
+  document.querySelectorAll('.tabs [data-panel]').forEach(button => button.addEventListener('click', () => {
+    const panel = button.dataset.panel;
+    document.querySelectorAll('.tabs [data-panel]').forEach(item =>
+      item.setAttribute('aria-selected', String(item === button)));
+    $('#panel-roleplay').hidden = panel !== 'roleplay';
+    $('#panel-creative').hidden = panel !== 'creative';
+  }));
+  populateVideos($('#videoSelect'));
+  populateVideos($('#creativeVideo'));
+  syncRoleControls();
+  renderCards();
+  if (entries.length) {
+    $('#videoSelect').value = entryKey(entries[0]);
+    $('#creativeVideo').value = entryKey(entries[0]);
+    syncRoleplayEntry();
+    populateCreativeLines();
+    setStatus('Chọn vai A/B hoặc cả hai, sau đó bắt đầu từ câu đầu transcript.');
+  } else {
+    $('#startSession').disabled = true;
+    setStatus('Chưa có video đã học. Hãy học một video và lưu transcript trước.');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1216,6 +1216,31 @@
       };
     }
 
+    const preferenceMatch = sentence.match(/^(.+?)\s+(like|likes|love|loves|enjoy|enjoys)\s+((?:to\s+\w+|\w+ing\b)(?:\s+.+)?)$/i);
+    if (preferenceMatch) {
+      const [, subject, preference, activity] = preferenceMatch;
+      const gerund = /\b\w+ing\b/i.test(activity) && !/^to\s+/i.test(activity);
+      const grammar = {
+        form: 'Sở thích với like / love / enjoy',
+        formula: gerund
+          ? 'S + like/love/enjoy + V-ing + (bổ ngữ)'
+          : 'S + like/love + to-V + (bổ ngữ)',
+        example: `${subject} ${preference} ${activity}`,
+        explanation: 'Like và love có thể đi với V-ing hoặc to-V; enjoy thường đi với V-ing. Phần động từ có thể đi kèm tân ngữ hoặc cụm bổ nghĩa.',
+        context: 'Dùng để diễn đạt sở thích hoặc điều người nói thích làm.',
+      };
+      return {
+        sentenceType: 'Câu diễn đạt sở thích',
+        formula: grammar.formula,
+        structure: [
+          { part: subject, role: 'Chủ ngữ' },
+          { part: preference, role: 'Động từ diễn đạt sở thích' },
+          { part: activity, role: gerund ? 'Hoạt động ở dạng V-ing' : 'Hoạt động ở dạng to-V' },
+        ],
+        grammar,
+      };
+    }
+
     const match = sentence.match(/^(This|That|These|Those|I|You|He|She|It|We|They)\s+(am|is|are|was|were)\s+(.+)$/i);
     if (!match) return null;
 

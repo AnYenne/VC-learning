@@ -2,6 +2,8 @@
 
 Học ngôn ngữ qua video YouTube: dán link, chọn phụ đề/ngôn ngữ gốc của video, xem transcript kèm bản dịch, luyện shadowing có chấm điểm và chép chính tả.
 
+Giao diện dùng tông pastel ấm, thẻ bo tròn và điểm nhấn minh hoạ lấy cảm hứng kawaii; các trang học, lịch sử và luyện tập dùng chung `public/theme.css`.
+
 ## Chạy
 
 Cần Node 18 trở lên. Không cần `npm install`.
@@ -22,6 +24,9 @@ Mở http://localhost:3000, dán link YouTube (hoặc mã video 11 ký tự) r�
   - Các cấp tiếng Ý và tiếng Trung chỉ là mức tham khảo của bộ quy tắc, không thay thế đánh giá giáo viên. Đây là bộ nhận diện theo mẫu, không phải bộ phân tích ngữ pháp tổng quát; một số câu có thể chứa cấu trúc không được nhận diện hoặc cần ngữ cảnh để phân biệt.
 - **Tra từ**: bấm vào từ bất kỳ để xem bản dịch, phiên âm và nghe phát âm.
 - **Shadowing**: nghe câu mẫu, bấm "Nói theo", đọc lại. App chấm phát âm theo nhận dạng lời nói và hiển thị thêm ước tính nhịp điệu, trọng âm, ngữ điệu từ thời lượng, cường độ và cao độ bản ghi; các chỉ số ước tính không so trực tiếp với giọng gốc. Từng tiêu chí hiển thị thang điểm 0–100 và lưu theo câu. App cũng tô màu từ đúng/gần đúng/bị sót và cho nghe lại giọng của bạn.
+- **Phòng luyện tập**: trang riêng `practice.html` có nhập vai hội thoại và mở rộng câu. Nhập vai chia lượt A/B luân phiên theo câu transcript (không phải nhận diện người nói): nghe vai còn lại, nói lượt của mình, chấm theo câu gốc hoặc chọn ứng biến; chế độ “Cả hai vai” phát từng câu mẫu để người học nhại từ đầu đến cuối. Có thể ẩn lời thoại, nghe lại hoặc bỏ qua lượt. Nhận dạng giọng nói dùng Chrome/Edge.
+- **Mở rộng câu & từ vựng**: chọn câu trong video đã học để xem cấu trúc/công thức nếu bộ phân tích nhận diện được; sửa khung câu, thêm danh từ, động từ và hoạt động thay thế để xem câu biến thể, rồi lưu thành bộ thẻ cá nhân trên trình duyệt. Một số gợi ý tự động hiện chỉ là ví dụ tiếng Anh theo mẫu phổ biến, cần kiểm tra ngữ cảnh và ngôn ngữ trước khi dùng.
+- **Âm lượng video**: điều chỉnh từ 0 đến 100 ở thanh trên cùng; mức âm lượng được lưu trên trình duyệt và áp dụng cho video kế tiếp.
 - **Chính tả**: nghe câu (thường hoặc chậm), gõ lại, chấm điểm và hiện chỗ sai. Có gợi ý từng từ.
 - **Video đã học**: mở trang riêng "Video đã học" để tìm kiếm và mở lại video/transcript theo ngôn ngữ đã học. Trang hiển thị số câu đã shadowing, điểm trung bình và các câu đạt từ 80 điểm; nút "Tiếp tục shadowing" mở từ câu chưa đạt/chưa luyện. Lịch sử và tiến độ được lưu riêng trên trình duyệt; khi bộ nhớ gần đầy, video cũ nhất sẽ bị loại để dành chỗ.
 - **Ôn tập**: video đã tải được lưu vào lịch sử trên trình duyệt để mở lại và ôn tập sau. Bài tập luân phiên giữa điền chữ còn thiếu, chọn từ phù hợp, dịch câu, phát âm cả câu (Chrome/Edge có nhận giọng nói) và nhớ nghĩa từ. Câu chỉ có một từ sẽ hiện nghĩa dịch làm gợi ý cho bài điền từ. Có thể ôn video hiện tại hoặc trộn các video đã học; tiến độ là một lượt câu ngẫu nhiên để gợi nhớ, không thay bài học gốc.

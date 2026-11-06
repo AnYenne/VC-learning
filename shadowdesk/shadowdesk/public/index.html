@@ -43,6 +43,8 @@
   .opts { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; color: var(--mute); font-size: 13px; }
   .opts label { display: inline-flex; gap: 6px; align-items: center; }
   .opts select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+  .volume-control { gap: 7px !important; }
+  .volume-control input { width: 90px; accent-color: var(--accent); }
 
   main { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr); gap: 16px; padding: 16px 20px 24px; align-items: start; }
   .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -147,12 +149,14 @@
     .cap .en { font-size: 18px; }
   }
 </style>
+<link rel="stylesheet" href="theme.css">
 </head>
 <body class="mode-watch">
 
 <header class="top">
   <div class="brand">Shadow<span>Desk</span></div>
   <a class="btn library-link" href="history.html">Video đã học</a>
+  <a class="btn library-link" href="practice.html">Luyện tập</a>
   <form id="f">
     <input id="url" type="text" placeholder="Dán link YouTube (hoặc mã video 11 ký tự)" autocomplete="off">
     <button class="btn primary" id="go">Tải video</button>
@@ -178,6 +182,10 @@
         <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
         <option value="1" selected>1×</option><option value="1.25">1.25×</option>
       </select>
+    </label>
+    <label class="volume-control">Âm lượng
+      <input type="range" id="volume" min="0" max="100" step="1" value="75" aria-label="Âm lượng video">
+      <span id="volumeValue">75%</span>
     </label>
     <label><input type="checkbox" id="showEn" checked> Chữ gốc</label>
     <label><input type="checkbox" id="showVi" checked> Bản dịch</label>
@@ -267,6 +275,7 @@
         <button class="btn primary" id="reviewStart">Bắt đầu bài ôn</button>
       </div>
       <p class="hint" id="reviewProgress">Bài ôn luân phiên: điền từ, chọn từ, dịch câu, phát âm câu và nghĩa từ.</p>
+      <a class="btn" href="practice.html">Mở phòng luyện tập: nhập vai &amp; mở rộng câu</a>
       <div id="reviewExercise" hidden>
         <div class="hint" id="reviewType"></div>
         <div class="exercise-question" id="reviewQuestion"></div>
@@ -305,14 +314,16 @@
   const $ = s => document.querySelector(s);
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
   };
+  const storedVolume = Number(store.get('ss:volume', 75));
 
   const state = {
     id: null, title: '', lines: [], vi: [], cur: -1, mode: 'watch',
     player: null, ready: false, stopAt: null, loop: false, holdLine: false, pending: null,
     loadToken: 0, translateToken: 0, codecFallbackFor: null,
     tl: store.get('ss:tl', 'vi'), sourceLang: store.get('ss:sourceLang', 'auto'),
+    volume: Number.isFinite(storedVolume) ? Math.max(0, Math.min(100, storedVolume)) : 75,
     pronunciations: [],
     analysis: null,
     history: Array.isArray(store.get('ss:history', [])) ? store.get('ss:history', []) : [],
@@ -332,6 +343,12 @@
       ? '<span class="w" data-w="' + esc(p.segment) + '">' + esc(p.segment) + '</span>'
       : esc(p.segment)).join('');
   };
+  const shadowText = text => String(text || '')
+    .replace(/>>/g, ' ')
+    .replace(/[♪♫]/g, ' ')
+    .replace(/\[(?:[^\]]*(?:music|musica|música|musique|musik|bgm|instrumental|song|singing|applause|aplausos|clapping|laughter|laughing|risas|risa|sighs?|sound effects?|sfx|noise|crowd|cheering|silence|inaudible|unintelligible|phone ringing|ringtone|gasping|crying|coughing|breathing|footsteps|kiss(?:es)?|door (?:opens?|closes?)|âm nhạc|âm thanh|tiếng (?:cười|vỗ tay|nhạc|ồn)|đám đông|im lặng|không nghe rõ)[^\]]*)\]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   const speak = t => {
     try {
       speechSynthesis.cancel();
@@ -410,6 +427,7 @@
         onReady: () => {
           state.ready = true;
           state.player.setPlaybackRate(+$('#rate').value);
+          applyPlayerVolume();
           if (state.pending) {
             const pending = state.pending;
             state.pending = null;
@@ -441,6 +459,13 @@
     }
     else if (apiReady && !state.player) { state.pending = null; makePlayer(id); }
     else state.pending = id;
+  }
+
+  function applyPlayerVolume() {
+    if (!state.ready) return;
+    state.player.setVolume(state.volume);
+    if (state.volume === 0) state.player.mute();
+    else state.player.unMute();
   }
 
   function playLine(i, loop, rate) {
@@ -477,8 +502,8 @@
   /* ---------- transcript ---------- */
   function renderList() {
     $('#lines').innerHTML = state.lines.map((l, i) =>
-      '<li data-i="' + i + '"><time>' + fmt(l.start) + '</time><div><p class="en">' + wordsHTML(l.text) +
-      '</p><p class="vi">' + esc(state.vi[i] || '') + phoneticHTML(state.pronunciations[i]) +
+      '<li data-i="' + i + '"><time>' + fmt(l.start) + '</time><div><p class="en">' + wordsHTML(state.mode === 'shadow' ? shadowText(l.text) : l.text) +
+      '</p><p class="vi">' + esc(state.mode === 'shadow' ? shadowText(state.vi[i] || '') : state.vi[i] || '') + phoneticHTML(state.pronunciations[i]) +
       '</p></div><b class="bd"></b></li>').join('');
     refreshBadges();
   }
@@ -496,9 +521,9 @@
   }
   function renderCap() {
     const L = state.lines[state.cur];
-    $('#cap .en').innerHTML = L ? wordsHTML(L.text) : '';
+    $('#cap .en').innerHTML = L ? wordsHTML(state.mode === 'shadow' ? shadowText(L.text) : L.text) : '';
     $('#cap .vi').innerHTML = L
-      ? esc(state.vi[state.cur] || '') + phoneticHTML(state.pronunciations[state.cur])
+      ? esc(state.mode === 'shadow' ? shadowText(state.vi[state.cur] || '') : state.vi[state.cur] || '') + phoneticHTML(state.pronunciations[state.cur])
       : '';
     $('#analyzeSentence').disabled = !L;
     renderAnalysis();
@@ -673,7 +698,7 @@
       store.set('ss:sourceLang', state.sourceLang);
     }
     renderLanguageOptions(j.languages || []);
-    state.progress = store.get(progressKey(id), { shadow: {}, dict: {} });
+    state.progress = loadProgress(id, state.language);
     $('#title').textContent = j.title || 'Transcript';
     document.title = (j.title ? j.title + ' · ' : '') + 'ShadowDesk';
     $('#asr').hidden = true;
@@ -708,7 +733,20 @@
     return progressKeyFor(id, state.language);
   }
   function progressKeyFor(id, language) {
-    return language === 'en' ? 'ss:' + id : 'ss:' + id + ':' + language;
+    return language?.split('-')[0].toLowerCase() === 'en' ? 'ss:' + id : 'ss:' + id + ':' + language;
+  }
+  function loadProgress(id, language) {
+    const key = progressKeyFor(id, language);
+    const saved = store.get(key, null);
+    if (saved) return saved;
+    if (language?.split('-')[0].toLowerCase() === 'en') {
+      const legacy = store.get('ss:' + id + ':' + language, null);
+      if (legacy) {
+        store.set(key, legacy);
+        return legacy;
+      }
+    }
+    return { shadow: {}, dict: {} };
   }
   function speechLocale(language) {
     if (/^zh(?:$|-Hans(?:-|$)|-CN$|-SG$)/i.test(language)) return 'zh-CN';
@@ -1143,6 +1181,17 @@
     if (state.id) loadVideo(state.id);
   });
   $('#rate').addEventListener('change', e => { if (state.ready) state.player.setPlaybackRate(+e.target.value); });
+  $('#volume').value = String(state.volume);
+  $('#volumeValue').textContent = state.volume + '%';
+  $('#volume').addEventListener('input', event => {
+    const volume = Number(event.target.value);
+    if (!Number.isInteger(volume) || volume < 0 || volume > 100) return;
+    state.volume = volume;
+    $('#volumeValue').textContent = volume + '%';
+    try { localStorage.setItem('ss:volume', JSON.stringify(volume)); }
+    catch (error) { setStatus('Không lưu được mức âm lượng: ' + error.message, true); }
+    applyPlayerVolume();
+  });
   $('#showEn').addEventListener('change', e => document.body.classList.toggle('hide-en', !e.target.checked));
   $('#showVi').addEventListener('change', e => document.body.classList.toggle('hide-vi', !e.target.checked));
   $('#s-hide').addEventListener('change', e => document.body.classList.toggle('hide-cap', e.target.checked));
@@ -1155,6 +1204,8 @@
     if (state.mode !== 'shadow') document.body.classList.remove('hide-cap'); else document.body.classList.toggle('hide-cap', $('#s-hide').checked);
     if (state.mode !== 'watch') { stopRec(); }
     state.stopAt = null; state.loop = false; state.holdLine = false;
+    renderCap();
+    renderList();
     if (state.mode === 'shadow') restoreShadowAssessment();
     refreshBadges(); updateMask();
   }));
@@ -1217,35 +1268,105 @@
     $('#s-out').hidden = false;
   }
   function restoreShadowAssessment() {
-    const saved = state.progress.shadowDetails?.[state.cur];
-    if (saved && Number.isFinite(saved.score)) renderShadowAssessment(saved);
+    const saved = loadProgress(state.id, state.language).shadowDetails?.[state.cur] ||
+      state.progress.shadowDetails?.[state.cur];
+    if (!saved || !Number.isFinite(saved.score)) {
+      $('#s-out').hidden = true;
+      return;
+    }
+    const line = state.lines[state.cur];
+    const events = saved.events || (line && saved.heard
+      ? Score.align(shadowText(line.text), saved.heard, state.language).events
+      : []);
+    renderShadowAssessment({ ...saved, events });
   }
-  async function measureRecording(blob, expectedDuration) {
+  async function startAudioCapture(stream) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) throw new Error('Trình duyệt không hỗ trợ phân tích âm thanh.');
+    if (!AudioContext || !AudioContext.prototype.createScriptProcessor)
+      throw new Error('Trình duyệt không hỗ trợ thu mẫu âm thanh trực tiếp.');
     const context = new AudioContext();
+    const sampleRate = context.sampleRate;
+    const source = context.createMediaStreamSource(stream);
+    const processor = context.createScriptProcessor(4096, 1, 1);
+    const silence = context.createGain();
+    const chunks = [];
+    let finishPromise = null;
+    let sourceConnected = false;
+    let processorConnected = false;
+    let silenceConnected = false;
+    silence.gain.value = 0;
     try {
-      const buffer = await context.decodeAudioData(await blob.arrayBuffer());
-      return Score.assessAcoustics(buffer.getChannelData(0), buffer.sampleRate, expectedDuration);
-    } finally {
+      processor.onaudioprocess = event => {
+        const channel = event.inputBuffer.getChannelData(0);
+        if (channel.length) chunks.push(new Float32Array(channel));
+      };
+      source.connect(processor);
+      sourceConnected = true;
+      processor.connect(silence);
+      processorConnected = true;
+      silence.connect(context.destination);
+      silenceConnected = true;
+      if (context.state === 'suspended') await context.resume();
+    } catch (error) {
+      processor.onaudioprocess = null;
+      if (sourceConnected) source.disconnect();
+      if (processorConnected) processor.disconnect();
+      if (silenceConnected) silence.disconnect();
       await context.close();
+      throw error;
+    }
+    return {
+      finish() {
+        if (finishPromise) return finishPromise;
+        processor.onaudioprocess = null;
+        source.disconnect();
+        processor.disconnect();
+        silence.disconnect();
+        const samples = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          samples.set(chunk, offset);
+          offset += chunk.length;
+        }
+        finishPromise = context.close().then(() => ({ samples, sampleRate }));
+        return finishPromise;
+      },
+    };
+  }
+  function measureRecording(capture, expectedDuration) {
+    if (!capture?.samples?.length) throw new Error('Không thu được mẫu âm thanh từ micro.');
+    return Score.assessAcoustics(capture.samples, capture.sampleRate, expectedDuration);
+  }
+  async function finishRecording(audioCapture, stream) {
+    try {
+      return await audioCapture.finish();
+    } finally {
+      stream.getTracks().forEach(track => track.stop());
     }
   }
-  function saveShadowAssessment(videoId, language, index, score, metrics, heard, events) {
+  function saveShadowAssessment(videoId, language, index, score, metrics, heard) {
     const key = progressKeyFor(videoId, language);
-    const progress = store.get(key, { shadow: {}, dict: {} });
+    const progress = loadProgress(videoId, language);
     progress.shadow ||= {};
     progress.shadowDetails ||= {};
     if (progress.shadow[index] == null || score > progress.shadow[index]) progress.shadow[index] = score;
+    const previous = progress.shadowDetails[index] || {};
     progress.shadowDetails[index] = {
-      score, metrics, heard, events, updatedAt: Date.now(),
+      score,
+      metrics: metrics || previous.metrics || null,
+      heard: heard || previous.heard || '',
+      updatedAt: Date.now(),
     };
-    store.set(key, progress);
+    for (const detail of Object.values(progress.shadowDetails)) {
+      if (detail && typeof detail === 'object') delete detail.events;
+    }
+    const stored = store.set(key, progress);
     if (state.id === videoId && state.language === language) {
       state.progress = progress;
       refreshBadges();
       if (state.cur === index && state.mode === 'shadow') renderShadowAssessment(progress.shadowDetails[index]);
     }
+    return stored;
   }
 
   async function startRec() {
@@ -1257,28 +1378,44 @@
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
     catch (e) { msg.textContent = 'Chưa có quyền dùng micro. Hãy cho phép micro cho trang này.'; return; }
 
-    let mr = null; const chunks = [];
+    let mr = null;
+    const chunks = [];
+    let audioCapture = null;
+    let audioCaptureError = null;
+    try { audioCapture = await startAudioCapture(stream); }
+    catch (error) { audioCaptureError = error; }
     let recordingPromise = null;
     try {
       mr = new MediaRecorder(stream);
       recordingPromise = new Promise(resolve => {
         mr.onstop = () => {
-          stream.getTracks().forEach(t => t.stop());
           const blob = chunks.length ? new Blob(chunks, { type: mr.mimeType }) : null;
           if (blob) {
             const audio = new Audio(URL.createObjectURL(blob));
             state.mine = audio; $('#s-mine').disabled = false;
           }
-          resolve(blob);
+          const capturePromise = audioCapture
+            ? finishRecording(audioCapture, stream)
+            : Promise.resolve(null).finally(() => stream.getTracks().forEach(track => track.stop()));
+          capturePromise.then(capture => resolve({ blob, capture, captureError: audioCaptureError }))
+            .catch(error => {
+              stream.getTracks().forEach(track => track.stop());
+              resolve({ blob, capture: null, captureError: error });
+            });
         };
       });
       mr.ondataavailable = e => e.data.size && chunks.push(e.data);
       mr.start();
-    } catch (e) { stream.getTracks().forEach(t => t.stop()); mr = null; recordingPromise = null; }
+    } catch (error) {
+      mr = null;
+      recordingPromise = null;
+      audioCaptureError ||= error;
+    }
 
     const assessmentContext = {
       videoId: state.id, language: state.language, index: state.cur,
-      line: state.lines[state.cur], progressKey: progressKey(state.id),
+      line: { ...state.lines[state.cur], text: shadowText(state.lines[state.cur].text) },
+      progressKey: progressKey(state.id),
     };
     const r = new SR();
     r.lang = speechLocale(state.language);
@@ -1301,26 +1438,37 @@
       state.rec = null;
       $('#s-rec').classList.remove('on'); $('#s-rec').textContent = '● Nói theo';
       if (!heard) { if (/^Đang nghe/.test(msg.textContent) || !msg.textContent) msg.textContent = 'Không nghe thấy gì. Thử nói gần micro hơn.'; return; }
+      if (!assessmentContext.line.text) {
+        msg.textContent = 'Câu này chỉ có ghi chú âm thanh, không có lời thoại để luyện.';
+        if (recordingPromise) mr.stop();
+        else stream.getTracks().forEach(track => track.stop());
+        return;
+      }
       const res = Score.align(assessmentContext.line.text, heard, assessmentContext.language);
       const initialAssessment = { score: res.score, metrics: null, heard, events: res.events };
       if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index) {
         renderShadowAssessment(initialAssessment);
       }
       msg.textContent = 'Xanh là đúng, vàng là gần đúng, đỏ viền đứt là bị sót.';
-      saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
-        assessmentContext.index, res.score, null, heard, res.events);
+      if (!saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
+        assessmentContext.index, res.score, null, heard)) {
+        msg.textContent = 'Không lưu được tiến độ vào trình duyệt. Hãy giải phóng dung lượng lưu trữ rồi chấm lại.';
+      }
       if (recordingPromise) {
         try {
-          const blob = await recordingPromise;
-          if (!blob) throw new Error('Không có bản ghi micro.');
+          const recording = await recordingPromise;
+          if (!recording.capture) throw recording.captureError || new Error('Không thu được mẫu âm thanh từ micro.');
           const duration = assessmentContext.line.end - assessmentContext.line.start;
-          const metrics = await measureRecording(blob, duration);
+          const metrics = measureRecording(recording.capture, duration);
           if (!metrics) throw new Error('Âm thanh thu được quá ngắn hoặc quá nhỏ.');
           const fullAssessment = { score: res.score, metrics, heard, events: res.events };
-          saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
-            assessmentContext.index, res.score, metrics, heard, res.events);
+          const stored = saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
+            assessmentContext.index, res.score, metrics, heard);
           if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index &&
               state.mode === 'shadow') renderShadowAssessment(fullAssessment);
+          msg.textContent = stored
+            ? 'Xanh là đúng, vàng là gần đúng, đỏ viền đứt là bị sót.'
+            : 'Không lưu được tiến độ vào trình duyệt. Hãy giải phóng dung lượng lưu trữ rồi chấm lại.';
         } catch (error) {
           if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index) {
             $('#s-assessment-note').textContent =
@@ -1328,8 +1476,24 @@
           }
         }
       } else {
-        $('#s-assessment-note').textContent =
-          'Chỉ có điểm phát âm; trình duyệt chưa hỗ trợ ghi âm để ước tính các tiêu chí khác.';
+        try {
+          if (!audioCapture) throw audioCaptureError || new Error('Không thu được mẫu âm thanh từ micro.');
+          const capture = await finishRecording(audioCapture, stream);
+          const duration = assessmentContext.line.end - assessmentContext.line.start;
+          const metrics = measureRecording(capture, duration);
+          if (!metrics) throw new Error('Âm thanh thu được quá ngắn hoặc quá nhỏ.');
+          const stored = saveShadowAssessment(assessmentContext.videoId, assessmentContext.language,
+            assessmentContext.index, res.score, metrics, heard);
+          if (state.id === assessmentContext.videoId && state.cur === assessmentContext.index &&
+              state.mode === 'shadow') renderShadowAssessment({ score: res.score, metrics, heard, events: res.events });
+          msg.textContent = stored
+            ? 'Xanh là đúng, vàng là gần đúng, đỏ viền đứt là bị sót.'
+            : 'Không lưu được tiến độ vào trình duyệt. Hãy giải phóng dung lượng lưu trữ rồi chấm lại.';
+        } catch (error) {
+          stream.getTracks().forEach(track => track.stop());
+          $('#s-assessment-note').textContent =
+            'Chỉ có điểm phát âm; không phân tích được bản ghi: ' + error.message;
+        }
       }
     };
     state.rec = r;
